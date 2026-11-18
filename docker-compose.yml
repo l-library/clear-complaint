@@ -1,0 +1,34 @@
+# 只负责本地开发依赖：Postgres。
+# 后端、前端都在宿主机上直接跑（不容器化）。
+# 表结构一律走 Alembic 迁移，不要手动改库。
+#
+# 用法：
+#   docker compose up -d        启动
+#   docker compose logs -f db   看日志
+#   docker compose down         停止（保留数据）
+#   docker compose down -v      停止并删除数据
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: clear-complaint-db
+    restart: unless-stopped
+    environment:
+      # 本地开发凭据，生产环境绝不照搬（见 CONVENTION.md）
+      POSTGRES_DB: clear_complaint
+      POSTGRES_USER: clear_complaint
+      POSTGRES_PASSWORD: clear_complaint
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - clear-complaint-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clear_complaint -d clear_complaint"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  clear-complaint-db-data:
+    name: clear-complaint-db-data
