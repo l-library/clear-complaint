@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        先看 [docs/PLAN.md](https://github.com/tju-se-design/clear-complaint/blob/main/docs/PLAN.md) 的交付清单：已在计划里的，写清楚还差哪一块；不在计划里的，说明为什么要加。
+        先看 [docs/PLAN.md](https://github.com/l-library/clear-complaint/blob/main/docs/PLAN.md) 的交付清单：已在计划里的，写清楚还差哪一块；不在计划里的，说明为什么要加。
 
   - type: textarea
     id: problem

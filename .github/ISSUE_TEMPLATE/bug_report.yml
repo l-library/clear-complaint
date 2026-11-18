@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        提交前看一眼 [CONVENTION.md](https://github.com/tju-se-design/clear-complaint/blob/main/CONVENTION.md) 第 8 节，确认这不是已明确推迟、还没做的事项。
+        提交前看一眼 [CONVENTION.md](https://github.com/l-library/clear-complaint/blob/main/CONVENTION.md) 第 8 节，确认这不是已明确推迟、还没做的事项。
 
   - type: dropdown
     id: area
