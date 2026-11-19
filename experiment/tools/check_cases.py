@@ -17,6 +17,8 @@ import re
 from collections.abc import Mapping
 from pathlib import Path
 
+from harness import redflag
+
 VARIANTS = ("V1", "V2", "V3", "V4", "V5")
 TRIAGE = ("emergency", "clinic", "self_observe")
 
@@ -90,6 +92,16 @@ def _issues(row: Mapping[str, object]) -> list[str]:
             problems.append(f"档位非法 {gold.get('triage')}")
         if not gold.get("department"):
             problems.append("缺首诊科室")
+        else:
+            expected = gold.get("red_flags")
+            if isinstance(expected, list) and expected:
+                fired = {hit.rule_id for text in texts.values() for hit in redflag.detect(text)}
+                missed = sorted(set(str(item) for item in expected) - fired)
+                if missed:
+                    problems.append(
+                        f"金标准红旗 {missed} 在五个变体里都命不中"
+                        "（要么补触发词，要么这例不该标这条红旗）"
+                    )
     return problems
 
 

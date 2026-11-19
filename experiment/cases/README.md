@@ -29,15 +29,9 @@ uv run python -m tools.check_cases cases/pilot.jsonl --final   # 金标准齐全
 
 ## 签核
 
-每例审完后追加一行到 `signoff.jsonl`：
+仓库里不放签核文件。等价性确认与金标准裁决由团队在仓库外留档（含确认人、时间、裁决结果），需要时再整理进来。
 
-```json
-{"case_id": "D01", "reviewer": "张三", "at": "2026-12-02T10:30:00+08:00",
- "equivalence": "ok", "gold_triage": "emergency", "gold_department": "急诊科",
- "gold_red_flags": ["RF06"], "note": "V5 的 fa烧 与 V1 等价"}
-```
-
-两个标注人各一行，裁决人再一行并注明 `"adjudicator": true`。
+仓库这边只保证一件事：**金标准不许和规则打架**。`check_cases` 会把每例的五个变体喂给红旗规则，如果金标准里某条红旗在五段文本里都命不中，就报出来——那说明要么触发词表缺了这种说法，要么这例不该标这条红旗。红旗漏检率是硬指标，这种错必须在跑矩阵之前就排掉。
 
 ## 草稿的设计意图
 
