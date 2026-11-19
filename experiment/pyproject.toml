@@ -1,0 +1,36 @@
+[project]
+name = "clear-complaint-experiment"
+version = "0.1.0"
+description = "Stage one experiment: corpus, cases, harness, analysis"
+requires-python = ">=3.14"
+# 零运行时依赖：抓取与抽取只用标准库，PDF 文本由系统的 pdftotext 提供
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+    "mypy",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["tools", "harness"]
+
+[tool.mypy]
+python_version = "3.14"
+files = ["tools", "tests"]
+strict = true
