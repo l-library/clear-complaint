@@ -1,7 +1,7 @@
 import json
 from typing import cast
 
-from harness import llm, pipeline
+from harness import arms, llm, pipeline
 from harness.retrieval import Index, Passage
 
 DEPARTMENTS = ["急诊科", "呼吸内科", "消化内科", "全科医学科"]
@@ -162,6 +162,21 @@ def test_output_side_arm_flags_a_missing_section() -> None:
 
     assert record.status == "template_invalid"
     assert record.template_ok is False
+
+
+def test_system_prompt_lists_the_controlled_vocabulary() -> None:
+    """不把词表给模型，闸门删的就是「猜不猜得中」而不是约束效果。"""
+    messages = arms.build_messages(
+        "A0",
+        DEPARTMENTS,
+        [(0, POOL_TEXT)],
+        "流鼻涕三天了",
+        ["上呼吸道感染", "流行性感冒"],
+    )
+
+    system = messages[0]["content"]
+    assert "上呼吸道感染" in system
+    assert "流行性感冒" in system
 
 
 def test_record_carries_the_arm_hash_so_prompt_changes_are_visible() -> None:

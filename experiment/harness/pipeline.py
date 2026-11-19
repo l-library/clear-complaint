@@ -152,6 +152,7 @@ def run_unit(
         departments,
         [(position, passage.text) for position, passage in enumerate(passages)],
         complaint,
+        sorted(vocab.known_terms() - {"未标注"}),
     )
 
     started = time.monotonic()

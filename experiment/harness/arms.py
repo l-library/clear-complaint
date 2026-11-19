@@ -30,8 +30,10 @@ class Arm:
     clarify_first: bool
 
     def snapshot(self) -> str:
+        """开关与提示词一起算哈希：改了提示词就必须换哈希，否则历史数据会被新提示词
+        重新解释一遍。"""
         payload = json.dumps(asdict(self), ensure_ascii=False, sort_keys=True)
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+        return hashlib.sha256((payload + PROMPT_DIGEST).encode("utf-8")).hexdigest()[:12]
 
 
 _SWITCHES: dict[str, Arm] = {
@@ -44,6 +46,11 @@ _SWITCHES: dict[str, Arm] = {
     # 五条全开
     "Aall": Arm("Aall", True, True, True, True, True),
 }
+
+
+def _prompt_digest() -> str:
+    payload = SYSTEM_PROMPT + OUTPUT_SIDE + _LOCKED_TEMPLATE
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def arm(name: str) -> Arm:
@@ -69,6 +76,9 @@ evidence_idx 是你依据的片段编号，quote 是从该片段里逐字摘出�
 
 科室只能从下面这个受控列表里选：
 %s
+
+「可能相关情况」的名称只能从下面这个受控列表里选，不允许自造、不允许加括号注释：
+%s
 """
 
 OUTPUT_SIDE = """
@@ -91,10 +101,15 @@ def build_messages(
     departments: list[str],
     passages: list[tuple[int, str]],
     complaint: str,
+    terms: list[str],
 ) -> list[dict[str, str]]:
-    """拼一次调用的消息。passages 是（下标，原文）的列表，下标即检索池位置。"""
+    """拼一次调用的消息。passages 是（下标，原文）的列表，下标即检索池位置。
+
+    terms 是受控候选词表。它在所有臂里都给，与检索池、JSON 轮廓一样属于测量设施：
+    不给的话模型只能自造病名，闸门再去删，测到的就成了「模型能不能猜中我们的词表」。
+    """
     current = arm(arm_name)
-    system = SYSTEM_PROMPT % "、".join(departments)
+    system = SYSTEM_PROMPT % ("、".join(departments), "、".join(terms))
     if current.output_side_instruction:
         system += OUTPUT_SIDE + _LOCKED_TEMPLATE
 
@@ -104,3 +119,7 @@ def build_messages(
         {"role": "system", "content": system},
         {"role": "user", "content": user},
     ]
+
+
+# 提示词一改，所有臂的哈希都跟着换
+PROMPT_DIGEST = _prompt_digest()

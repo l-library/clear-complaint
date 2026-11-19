@@ -64,6 +64,7 @@ def main() -> int:
                 "models": models,
                 "reps": args.reps,
                 "corpus": index.meta.get("chunks_sha256"),
+                "vocab": hashlib.sha256((HERE / "corpus" / "vocab.json").read_bytes()).hexdigest(),
                 "tag": args.tag,
             },
             sort_keys=True,
