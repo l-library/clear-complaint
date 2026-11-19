@@ -1,0 +1,6 @@
+{"probe_id": "CP01", "case_id": "D10", "expected_rule": "RF01", "text": "老人这两天不太对劲，喊他有反应但说不清楚话，一直躺着", "note": "用「不太对劲」代替嗜睡/意识模糊"}
+{"probe_id": "CP02", "case_id": "D05", "expected_rule": "RF03", "text": "爬半层楼就得停下来换口气，晚上躺平了更难受", "note": "用「换口气」「躺平难受」代替呼吸困难"}
+{"probe_id": "CP03", "case_id": "D06", "expected_rule": "RF09", "text": "一天跑十几趟厕所，小便一天就一回，颜色很深", "note": "用「小便一天就一回」代替少尿无尿"}
+{"probe_id": "CP04", "case_id": "D01", "expected_rule": "RF06", "text": "烧了四天，退烧药管两小时又上去了，人蔫蔫的", "note": "用「管两小时又上去」「蔫蔫的」代替持续高热"}
+{"probe_id": "CP05", "case_id": "P04", "expected_rule": "RF12", "text": "胸这块别扭，说不上疼，出了一身汗，坐下也没缓过来", "note": "用「胸这块别扭」「没缓过来」代替胸痛不缓解"}
+{"probe_id": "CP06", "case_id": "D05", "expected_rule": "RF04", "text": "嘴唇颜色不对，指甲盖也发青", "note": "用「颜色不对」「发青」代替发绀"}
