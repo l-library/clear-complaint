@@ -1,4 +1,4 @@
-from tools.govcn import split_clauses
+from tools.fetch import split_clauses
 
 GUIDELINE = """一、病原学
 麻疹病毒为副黏病毒科麻疹病毒属，只有一个血清型，人是麻疹病毒的唯一宿主。

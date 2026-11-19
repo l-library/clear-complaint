@@ -23,17 +23,23 @@
 
 ## 当前状态
 
-语料可达性实测已完成，结论在 `corpus/probe_report.md`：`gov.cn` 政策文件库只对上呼吸道、发热、腹泻、皮疹四个主诉域给出了充足的可引片段，头痛为零，其余偏薄。域数待据此裁定，见 [docs/stage1.md](../docs/stage1.md) 的「语料」一节。
+语料来源从 `gov.cn` 换成 `nhc.gov.cn`，域的口径从「症状」换成「病种」，理由与结论见 [docs/stage1.md](../docs/stage1.md) 的「语料」一节。
 
-重跑：
+两轮的实测结论：
+
+- `corpus/probe_report.md`：`gov.cn` 政策文件库只对上呼吸道、发热、腹泻、皮疹四个症状域给出充足片段，头痛为零。这是换源与改域口径的依据，报告留着做对照。
+- `corpus/download_list.md`：`nhc.gov.cn` 上找到的 45 份诊疗类文件清单，覆盖的域多得多（脑血管病、急性冠脉综合征、房颤、心衰、慢阻肺、肥胖症、诺如、尼帕、埃博拉等）。
+
+`nhc.gov.cn` 正文页有瑞数动态防护：真实 Chromium 预热拿到 cookie 后能取到 200 全文，但连续自动化请求会被升级拦截（412 → 400）。所以正文与附件改由人工下载到 `corpus/raw/`，分片与统计全部离线，不依赖反爬。
 
 ```bash
 cd experiment
 uv sync
-uv run python -m tools.probe_corpus     # 命中 .cache/ 里的缓存，不重复打网络
+uv run python -m tools.list_candidates   # 只碰站点搜索接口，产出下载清单
+uv run python -m tools.probe_corpus      # 旧的 gov.cn 实测，命中缓存，不重复打网络
 ```
 
-`.cache/` 存原始 PDF 与响应，体积大，不入仓库；`corpus/candidates.json` 记录了每份文件的来源 URL 与条款数，重跑据此可复现。
+`.cache/` 存原始 PDF 与响应，体积大，不入仓库；`corpus/*.json` 记录了来源 URL 与条款数，重跑据此可复现。
 
 ## 凭据
 

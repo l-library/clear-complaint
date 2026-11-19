@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from tools import govcn
+from tools import fetch, govcn
 
 HERE = Path(__file__).resolve().parent.parent
 CORPUS = HERE / "corpus"
@@ -157,10 +157,10 @@ def harvest(notice: govcn.Notice) -> DocResult:
         result.pdfs = pdfs
         if pdfs:
             for pdf in pdfs:
-                result.clauses += len(govcn.split_clauses(govcn.pdf_text(pdf)))
+                result.clauses += len(fetch.split_clauses(fetch.pdf_text(pdf)))
         else:
             # 少数通知把方案正文直接排在 HTML 里，没有附件
-            result.clauses = len(govcn.split_clauses(govcn.page_body(notice.url)))
+            result.clauses = len(fetch.split_clauses(govcn.page_body(notice.url)))
     except Exception as exc:  # noqa: BLE001 - 记录失败，不让单篇文档中断整轮
         result.error = f"{type(exc).__name__}: {exc}"[:200]
     return result
@@ -184,10 +184,10 @@ def main() -> int:
         sources = result.pdfs or [result.url]
         for source in sources:
             try:
-                raw = govcn.pdf_text(source) if result.pdfs else govcn.page_body(result.url)
+                raw = fetch.pdf_text(source) if result.pdfs else govcn.page_body(result.url)
             except Exception:  # noqa: BLE001 - 统计阶段忽略单篇失败
                 continue
-            for clause in govcn.split_clauses(raw):
+            for clause in fetch.split_clauses(raw):
                 if not (MIN_CLAUSE <= len(clause.text) <= MAX_CLAUSE):
                     continue
                 total_clauses += 1

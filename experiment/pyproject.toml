@@ -8,6 +8,9 @@ dependencies = []
 
 [dependency-groups]
 dev = [
+    # pin 到 pipx 里已有的版本，复用 ~/.cache/ms-playwright 里已下载的 chromium，
+    # 不在 CI 里重复下浏览器；升级要连同 playwright install 一起动
+    "playwright==1.64.1",
     "pytest",
     "ruff",
     "mypy",
