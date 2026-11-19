@@ -1,1 +1,3 @@
 .cache/
+# 原始下载件体积大（含扫描件），入库的是 corpus/text/ 与带 sha256 的 manifest
+corpus/raw/
