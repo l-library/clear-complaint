@@ -13,7 +13,7 @@ Thumbs.db
 *.local
 
 # ---- 后端：uv / Python ----
-backend/.venv/
+.venv/
 backend/.env
 __pycache__/
 *.py[cod]
