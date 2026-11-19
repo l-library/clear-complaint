@@ -50,8 +50,8 @@ def test_cached_reuses_vectors_and_only_calls_for_missing(
 def test_missing_credentials_is_reported_not_silently_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("EMBED_API_KEY", raising=False)
-    monkeypatch.delenv("MAAS_API_KEY", raising=False)
+    for name in ("EMBED_API_KEY", "MAAS_API_KEY", "HUAWEI_MAAS_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
 
     with pytest.raises(embed.EmbedError, match="EMBED_API_KEY"):
         embed._config()

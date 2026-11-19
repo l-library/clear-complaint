@@ -29,7 +29,8 @@ HERE = Path(__file__).resolve().parent.parent
 CORPUS = HERE / "corpus"
 CACHE = HERE / ".cache" / "embed"
 
-DEFAULT_BASE_URL = "https://api.modelarts-maas.com/openai/v1"
+# 实测：MaaS 的向量化端点在 /v1 下，/openai/v1 只有对话接口，会返回 404 APIG.0101
+DEFAULT_BASE_URL = "https://api.modelarts-maas.com/v1"
 DEFAULT_MODEL = "bge-m3"
 BATCH_SIZE = 16
 
@@ -40,10 +41,14 @@ class EmbedError(RuntimeError):
 
 def _config() -> tuple[str, str, str]:
     base = os.environ.get("EMBED_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
-    key = os.environ.get("EMBED_API_KEY") or os.environ.get("MAAS_API_KEY", "")
+    key = (
+        os.environ.get("EMBED_API_KEY")
+        or os.environ.get("MAAS_API_KEY")
+        or os.environ.get("HUAWEI_MAAS_API_KEY", "")
+    )
     model = os.environ.get("EMBED_MODEL", DEFAULT_MODEL)
     if not key:
-        raise EmbedError("缺少 EMBED_API_KEY 或 MAAS_API_KEY")
+        raise EmbedError("缺少 EMBED_API_KEY / MAAS_API_KEY / HUAWEI_MAAS_API_KEY")
     return base, key, model
 
 
@@ -95,19 +100,25 @@ def top_k(matrix: np.ndarray, query: np.ndarray, k: int) -> list[tuple[int, floa
     return [(int(index), float(scores[index])) for index in order]
 
 
+def _pool() -> list[dict[str, str]]:
+    """检索池只放 clinical 片段。治疗段落里有剂量与方剂，检索到就会诱发用药建议。"""
+    rows = [
+        json.loads(line)
+        for line in (CORPUS / "chunks.jsonl").read_text("utf-8").splitlines()
+        if line
+    ]
+    return [row for row in rows if row["role"] == "clinical"]
+
+
 def _normalize(matrix: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     return (matrix / np.where(norms == 0, 1.0, norms)).astype(np.float32)
 
 
 def build() -> int:
-    rows = [
-        json.loads(line)
-        for line in (CORPUS / "chunks.jsonl").read_text("utf-8").splitlines()
-        if line
-    ]
+    rows = _pool()
     if not rows:
-        raise EmbedError("chunks.jsonl 为空")
+        raise EmbedError("检索池为空")
     texts = [f"{row['title']}｜{row['heading']}｜{row['text']}" for row in rows]
     vectors = _normalize(np.asarray(_cached(texts), dtype=np.float32))
     ids = np.asarray([row["chunk_id"] for row in rows])
@@ -122,6 +133,7 @@ def build() -> int:
                 "count": int(vectors.shape[0]),
                 "normalized": True,
                 "chunks_sha256": hashlib.sha256((CORPUS / "chunks.jsonl").read_bytes()).hexdigest(),
+                "pool": "clinical only",
                 "text_template": "title｜heading｜text",
             },
             ensure_ascii=False,
@@ -138,15 +150,11 @@ def check() -> int:
     meta = json.loads((CORPUS / "vectors.json").read_text(encoding="utf-8"))
     data = np.load(CORPUS / "vectors.npz")
     vectors = data["vectors"]
-    rows = [
-        json.loads(line)
-        for line in (CORPUS / "chunks.jsonl").read_text("utf-8").splitlines()
-        if line
-    ]
+    rows = _pool()
 
     problems: list[str] = []
     if vectors.shape[0] != len(rows):
-        problems.append(f"向量 {vectors.shape[0]} 条，片段 {len(rows)} 条")
+        problems.append(f"向量 {vectors.shape[0]} 条，检索池 {len(rows)} 条")
     if vectors.shape[1] != meta["dim"]:
         problems.append(f"维度 {vectors.shape[1]} 与元数据 {meta['dim']} 不符")
     if not np.isfinite(vectors).all():

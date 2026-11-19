@@ -27,13 +27,47 @@ _NOISE = re.compile(r"^(附件\s*\d+|目\s*录|第?\s*\d+\s*页)$")
 _SENTENCE_END = re.compile(r"(?<=[。！？；])")
 
 
+# 片段的角色决定它能不能进检索池。
+# clinical：临床表现、诊断、重症标准、就医与转诊指征——分诊结论与红旗只能引这些。
+# treatment：治疗与用药段落。排除有两个理由：一是里面全是剂量与方剂，检索到就会
+#            诱发模型输出用药建议；二是它对「该不该就诊、挂什么科」没有信息量。
+# background：病原学、流行病学、发病机制等，撑不起一句面向患者的结论。
+CLINICAL = (
+    "临床表现",
+    "诊断",
+    "鉴别诊断",
+    "实验室检查",
+    "分型",
+    "重型",
+    "重症",
+    "危重",
+    "就医",
+    "就诊",
+    "转诊",
+    "并发症",
+    "预后",
+    "筛查",
+    "评估",
+)
+TREATMENT = ("治疗", "救治", "处置", "用药", "中医", "针灸", "护理", "康复")
+
+
 @dataclass
 class Chunk:
     chunk_id: str
     source: str
     title: str
     heading: str
+    role: str
     text: str
+
+
+def _role(heading: str) -> str:
+    if any(word in heading for word in TREATMENT):
+        return "treatment"
+    if any(word in heading for word in CLINICAL):
+        return "clinical"
+    return "background"
 
 
 def _clean(text: str) -> str:
@@ -76,6 +110,7 @@ def _chunks_for(title: str, slug: str, text: str) -> list[Chunk]:
                     source=slug,
                     title=title,
                     heading=pending_heading,
+                    role=_role(pending_heading),
                     text=body,
                 )
             )
@@ -123,6 +158,17 @@ def main() -> int:
             continue
         chunks.extend(_chunks_for(title, slug, path.read_text(encoding="utf-8")))
 
+    # 同一段临床描述会在多个版本的文件里重复（新冠就有八版），检索池里留着只会挤占名额
+    seen: set[str] = set()
+    unique: list[Chunk] = []
+    for chunk in chunks:
+        key = re.sub(r"\s+", "", chunk.text)[:200]
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(chunk)
+    chunks = unique
+
     with (CORPUS / "chunks.jsonl").open("w", encoding="utf-8") as handle:
         for chunk in chunks:
             handle.write(json.dumps(asdict(chunk), ensure_ascii=False) + "\n")
@@ -133,7 +179,8 @@ def main() -> int:
         median = sorted(lengths)[len(lengths) // 2]
         print(f"[info] 片长 {min(lengths)}–{max(lengths)} 字，中位 {median}")
     covered = {chunk.source for chunk in chunks}
-    print(f"[info] 有片段的文件 {len(covered)} 份")
+    clinical = [chunk for chunk in chunks if chunk.role == "clinical"]
+    print(f"[info] 有片段的文件 {len(covered)} 份，其中 clinical 片段 {len(clinical)} 条")
     return 0
 
 
