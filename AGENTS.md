@@ -35,7 +35,15 @@ ClearComplaint is a split frontend and backend application. `frontend/` is one u
 │   ├── src/manifest.json           Per-platform config including the WeChat appid
 │   ├── vite.config.ts              H5 dev proxy for /api (targets port 8000)
 │   └── pnpm-workspace.yaml         All pnpm 12 settings: build allowlist and nodeLinker
-├── docs/                           PLAN.md, 赛题调研.md, materials and experiment data later
+├── experiment/                     Stage one research artifact: own uv project, never imports backend
+│   ├── corpus/                     Guideline fragments, frozen vectors, term list, department list, red flag list
+│   ├── cases/                      Cases, five variant families, gold labels, sign-off records
+│   ├── harness/                    Normalization, red flags, retrieval, citation and template gates, model client
+│   ├── arms/                       Prompts and switch snapshots for the four experiment arms
+│   ├── runs/                       Raw responses and parameters, append only
+│   ├── analysis/                   Metrics, bootstrap, figures/
+│   └── handoff/                    Constraint spec and frozen sample for stage two acceptance
+├── docs/                           PLAN.md, stage1.md, 赛题调研.md, materials later
 ├── docker-compose.yml              Local Postgres 16
 ├── .github/                        CI and issue templates
 ├── .editorconfig                   Editor formatting rules (enforced by tooling)
@@ -47,6 +55,7 @@ ClearComplaint is a split frontend and backend application. `frontend/` is one u
 ```
 
 - The backend groups code by feature, not by technical layer. No `routers/`, `services/`, `models/` folders. One package per domain, and cross-package imports only reach `common`, `db`, and the other package's service.
+- `experiment/` holds stage one: a standalone uv project that never imports `backend/`, and that the backend never depends on. When stage two needs its normalization, red flag, or citation gate logic, copy it into `backend/app/` and keep both running independently instead of merging them into one package.
 - Inside a domain package: `router.py` for routes, `service.py` for business logic, `schema.py` for request and response models, `models.py` for ORM models. Do not create empty files for parts that do not exist yet.
 - Frontend pages live at `src/pages/<module>/<page>.vue`. Components start with `Q`.
 

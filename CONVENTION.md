@@ -35,7 +35,15 @@
 │   ├── src/manifest.json           微信 appid 等分端配置
 │   ├── vite.config.ts              H5 开发时的 /api 代理（指向 8000）
 │   └── pnpm-workspace.yaml         pnpm 12 的全部设置：依赖构建白名单与 nodeLinker
-├── docs/                           PLAN.md、赛题调研.md，以后放材料与实验数据
+├── experiment/                     阶段一研究工件：独立 uv 项目，不 import 后端
+│   ├── corpus/                     指南片段、冻结向量、候选词表、科室表、红旗清单
+│   ├── cases/                      病例、五个变体、金标准、签核记录
+│   ├── harness/                    归一化、红旗、检索、引用与模板校验、模型客户端
+│   ├── arms/                       四个实验臂的提示词与开关快照
+│   ├── runs/                       原始响应与参数，只追加
+│   ├── analysis/                   指标、bootstrap、figures/
+│   └── handoff/                    约束规格书与冻结样本，阶段二验收用
+├── docs/                           PLAN.md、stage1.md、赛题调研.md，以后放材料与实验数据
 ├── docker-compose.yml              本地 Postgres 16
 ├── .github/                        CI 与 issue 模板
 ├── .editorconfig                   编辑格式规则（机器强制）
@@ -47,6 +55,7 @@
 ```
 
 - 后端按功能分包，不按 `routers/` `services/` `models/` 这类技术层平铺。一个领域一个包，跨包只依赖 `common`、`db` 和对方的 service。
+- `experiment/` 是阶段一的研究工件，独立 uv 项目，不 import `backend/`，后端也不依赖它。阶段二需要它的归一化、红旗或引用核验逻辑时复制副本进 `backend/app/`，两处各自独立运行，不合并成一个包。
 - 领域包内部约定：`router.py` 放路由，`service.py` 放业务逻辑，`schema.py` 放请求响应模型，`models.py` 放 ORM 模型。没有的部分不建空文件。
 - 前端页面放 `src/pages/<模块>/<页面>.vue`，组件以 `Q` 开头。
 
