@@ -73,6 +73,17 @@ def fetch(url: str, *, sleep: float = 0.4, referer: str = "https://www.gov.cn/")
     raise RuntimeError(f"抓取失败: {url}") from last
 
 
+def normalize(text: str) -> str:
+    """去掉行尾空白、把制表符换成空格、丢掉首尾空行。
+
+    pdftotext 的 -layout 与网页正文都会留下大量行尾空白，既过不了仓库的空白检查，
+    也让切出来的条款带着一串无用空格。只动行尾与缩进，不动行内文字，逐字核验比对
+    的就是行内文本。
+    """
+    lines = [line.replace("\t", "    ").rstrip() for line in text.splitlines()]
+    return "\n".join(lines).strip() + "\n"
+
+
 def plain(fragment: str) -> str:
     return html.unescape(re.sub(r"<[^>]+>", "", fragment)).strip()
 

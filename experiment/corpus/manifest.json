@@ -218,10 +218,10 @@
   {
     "source": "1734003159212_36556.pdf",
     "slug": "1734003159212_36556",
-    "title": "",
+    "title": "非新生儿破伤风诊疗规范（2024年版）",
     "sha256": "60fd318ecf536fdda692afc5ef76d451c5bb3d7423544c98f12dfafce3ac675b",
-    "chars": 1,
-    "status": "scanned"
+    "chars": 10579,
+    "status": "ocr"
   },
   {
     "source": "1741764832851_94226.pdf",
@@ -362,10 +362,10 @@
   {
     "source": "拉沙热诊疗方案（2026年版）.pdf",
     "slug": "拉沙热诊疗方案-2026年版",
-    "title": "",
+    "title": "西非国家，我国已报告输入性病例。为进一步规范拉沙热临床诊",
     "sha256": "a5661b8e0575f0791684b81b9b1419783a7abc9590af61f6901760f6ce2c324f",
-    "chars": 1,
-    "status": "scanned"
+    "chars": 4677,
+    "status": "ocr"
   },
   {
     "source": "附件1心力衰竭分级诊疗重点任务及服务流程图.docx",

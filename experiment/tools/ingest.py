@@ -13,11 +13,15 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from tools import fetch, ocr
+
 HERE = Path(__file__).resolve().parent.parent
+OCR_CACHE = HERE / ".cache" / "ocr"
 RAW = HERE / "corpus" / "raw"
 TEXT = HERE / "corpus" / "text"
 
@@ -93,16 +97,6 @@ _TITLE_HINT = re.compile(r"(诊疗|指南|规范|方案|指标|标准|流程图)
 _TITLE_HINT_LINES = 12
 
 
-def _normalize(text: str) -> str:
-    """去掉行尾空白与全文首尾空行。
-
-    pdftotext 的 -layout 会留下大量行尾空格，既过不了仓库的空白检查，也让切出来的
-    条款带着一串无用空格。只动行尾，不动行内内容，逐字核验靠的就是行内文本。
-    """
-    lines = [line.replace("\t", "    ").rstrip() for line in text.splitlines()]
-    return "\n".join(lines).strip() + "\n"
-
-
 def _title(text: str) -> str:
     lines: list[str] = []
     for line in text.splitlines():
@@ -117,7 +111,19 @@ def _title(text: str) -> str:
     return lines[0][:80] if lines else ""
 
 
-def main() -> int:
+def _ocr_cached(path: Path, digest: str) -> str:
+    """OCR 结果按文件哈希缓存，重跑不再花配额。"""
+    OCR_CACHE.mkdir(parents=True, exist_ok=True)
+    cached = OCR_CACHE / f"{digest}.txt"
+    if cached.exists():
+        return cached.read_text(encoding="utf-8")
+    text = ocr.ocr_local(path)
+    cached.write_text(text, encoding="utf-8")
+    return text
+
+
+def main(argv: list[str]) -> int:
+    use_ocr = "--ocr" in argv
     sources = sorted(p for p in RAW.iterdir() if p.is_file())
     office = [p for p in sources if p.suffix.lower() in {".doc", ".docx"} and p.stat().st_size]
     office_text = _office_texts(office)
@@ -135,23 +141,28 @@ def main() -> int:
         else:
             continue
 
-        body = _normalize(text).lstrip("\ufeff")
+        body = fetch.normalize(text).lstrip("\ufeff")
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
         if not body:
             status = "empty"
         elif len(body) < SCANNED_THRESHOLD and suffix == ".pdf":
             status = "scanned"
+            if use_ocr:
+                print(f"[info] OCR {path.name}")
+                body = fetch.normalize(_ocr_cached(path, digest))
+                status = "ocr" if len(body) >= SCANNED_THRESHOLD else "empty"
         else:
             status = "ok"
 
         slug = slugify(path.name)
-        if status == "ok":
+        if status in {"ok", "ocr"}:
             (TEXT / f"{slug}.txt").write_text(body, encoding="utf-8")
         results.append(
             Extracted(
                 source=path.name,
                 slug=slug,
                 title=_title(body),
-                sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                sha256=digest,
                 chars=len(body),
                 status=status,
             )
@@ -161,13 +172,13 @@ def main() -> int:
     (HERE / "corpus" / "manifest.json").write_text(
         json.dumps([asdict(r) for r in results], ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    ok = [r for r in results if r.status == "ok"]
+    ok = [r for r in results if r.status in {"ok", "ocr"}]
     print(f"[info] 文件 {len(results)} 个，可抽正文 {len(ok)} 个，共 {sum(r.chars for r in ok)} 字")
     for r in results:
-        if r.status != "ok":
+        if r.status not in {"ok", "ocr"}:
             print(f"[warn] {r.status:8} {r.source}")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

@@ -72,6 +72,7 @@ class Source:
     role: str
     keep: bool
     reason: str
+    batch: str
 
 
 def _classify(title: str, slug: str) -> tuple[str, bool, str]:
@@ -94,13 +95,16 @@ def _is_citable(heading: str) -> bool:
 
 
 def main() -> int:
-    manifest = json.loads((CORPUS / "manifest.json").read_text(encoding="utf-8"))
     sources: list[Source] = []
-    for entry in manifest:
-        if entry["status"] != "ok":
+    for batch, name in (("manual", "manifest.json"), ("govcn", "manifest_govcn.json")):
+        path = CORPUS / name
+        if not path.exists():
             continue
-        role, keep, reason = _classify(entry["title"], entry["slug"])
-        sources.append(Source(entry["slug"], entry["title"], role, keep, reason))
+        for entry in json.loads(path.read_text(encoding="utf-8")):
+            if entry["status"] != "ok":
+                continue
+            role, keep, reason = _classify(entry["title"], entry["slug"])
+            sources.append(Source(entry["slug"], entry["title"], role, keep, reason, batch))
 
     (CORPUS / "sources.json").write_text(
         json.dumps([asdict(s) for s in sources], ensure_ascii=False, indent=2), encoding="utf-8"
@@ -113,9 +117,10 @@ def main() -> int:
     per_source: dict[str, dict[str, int]] = {}
 
     for source in sources:
-        if not source.keep:
+        path = TEXT / f"{source.slug}.txt"
+        if not source.keep or not path.exists():
             continue
-        text = (TEXT / f"{source.slug}.txt").read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")
         for clause in fetch.split_clauses(text):
             if not (MIN_CLAUSE <= len(clause.text) <= MAX_CLAUSE):
                 continue
@@ -149,7 +154,8 @@ def _render(
         "",
         "由 `tools/probe_ingested.py` 生成。离线运行，只读 `corpus/text/`。",
         "",
-        f"- 入库文件 {len(kept)} 份，未入库 {len(dropped)} 份",
+        f"- 入库文件 {len(kept)} 份（手工 {len([s for s in kept if s.batch == 'manual'])}，"
+        f"gov.cn {len([s for s in kept if s.batch == 'govcn'])}），未入库 {len(dropped)} 份",
         f"- 参与统计的条款 {total_clauses} 条（{MIN_CLAUSE}–{MAX_CLAUSE} 字）",
         f"- 判定要求可用片段 ≥ {MIN_PER_DOMAIN} 且来自 ≥ 2 份文件",
         "",
