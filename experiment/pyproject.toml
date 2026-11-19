@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Stage one experiment: corpus, cases, harness, analysis"
 requires-python = ">=3.14"
 # 零运行时依赖：抓取与抽取只用标准库，PDF 文本由系统的 pdftotext 提供
-dependencies = []
+dependencies = [
+    "numpy>=2.5.5",
+]
 
 [dependency-groups]
 dev = [

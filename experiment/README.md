@@ -37,6 +37,10 @@ cd experiment
 uv sync
 uv run python -m tools.ingest --ocr        # 抽正文，扫描件走 PaddleOCR（需 PADDLEOCR_ACCESS_TOKEN）
 uv run python -m tools.fetch_govcn         # 从政策文件库补齐传染病诊疗方案
+uv run python -m tools.chunk               # 切片，产出 corpus/chunks.jsonl
+uv run python -m tools.controlled          # 三张受控表，每条都要能在语料里指到原文
+uv run python -m tools.embed               # 冻结向量，需 EMBED_API_KEY 或 MAAS_API_KEY
+uv run python -m tools.embed --check       # 校验向量与 chunks 是否一致
 uv run python -m tools.probe_ingested      # 病种覆盖表，离线
 uv run python -m tools.list_candidates     # 新的下载清单，只碰站点搜索接口
 ```
