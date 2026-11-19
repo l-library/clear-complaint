@@ -23,7 +23,7 @@
 
 ## 当前状态
 
-语料来源从 `gov.cn` 换成 `nhc.gov.cn`，域的口径从「症状」换成「病种」，理由与结论见 [docs/stage1.md](../docs/stage1.md) 的「语料」一节。
+语料已锁定九个病种域，51 份文件、1373 条条款，覆盖表在 `corpus/probe_ingested.md`。域的口径是病种而非症状，理由见 [docs/stage1.md](../docs/stage1.md) 的「语料」一节。
 
 两轮的实测结论：
 
@@ -35,8 +35,10 @@
 ```bash
 cd experiment
 uv sync
-uv run python -m tools.list_candidates   # 只碰站点搜索接口，产出下载清单
-uv run python -m tools.probe_corpus      # 旧的 gov.cn 实测，命中缓存，不重复打网络
+uv run python -m tools.ingest --ocr        # 抽正文，扫描件走 PaddleOCR（需 PADDLEOCR_ACCESS_TOKEN）
+uv run python -m tools.fetch_govcn         # 从政策文件库补齐传染病诊疗方案
+uv run python -m tools.probe_ingested      # 病种覆盖表，离线
+uv run python -m tools.list_candidates     # 新的下载清单，只碰站点搜索接口
 ```
 
 `.cache/` 存原始 PDF 与响应，体积大，不入仓库；`corpus/*.json` 记录了来源 URL 与条款数，重跑据此可复现。

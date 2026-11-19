@@ -92,9 +92,11 @@ def _office_texts(paths: list[Path]) -> dict[str, str]:
         shutil.rmtree(out, ignore_errors=True)
 
 
-# 这些文件的第一行常常是「附件 1」之类的编号，标题在它后面几行
-_TITLE_HINT = re.compile(r"(诊疗|指南|规范|方案|指标|标准|流程图)")
-_TITLE_HINT_LINES = 12
+# 这些文件的开头常是「附件 1」之类的编号，标题在它后面几行；而正文段落里也会
+# 出现「诊疗方案」几个字，所以按「短且含体例词」来挑，不是挑第一个命中的长句
+_TITLE_KINDS = ("诊疗方案", "诊疗规范", "诊疗指南", "防控方案", "防治指南", "服务规范", "技术方案")
+_TITLE_MAX_LEN = 30
+_TITLE_SCAN_LINES = 20
 
 
 def _title(text: str) -> str:
@@ -103,12 +105,13 @@ def _title(text: str) -> str:
         stripped = re.sub(r"\s+", " ", line.strip().lstrip("\ufeff"))
         if len(stripped) >= 4:
             lines.append(stripped)
-        if len(lines) >= _TITLE_HINT_LINES:
+        if len(lines) >= _TITLE_SCAN_LINES:
             break
     for line in lines:
-        if _TITLE_HINT.search(line) and len(line) >= 8:
-            return line[:80]
-    return lines[0][:80] if lines else ""
+        if len(line) <= _TITLE_MAX_LEN and any(kind in line for kind in _TITLE_KINDS):
+            return line
+    short = [line for line in lines if len(line) <= _TITLE_MAX_LEN]
+    return (short[0] if short else lines[0] if lines else "")[:80]
 
 
 def _ocr_cached(path: Path, digest: str) -> str:

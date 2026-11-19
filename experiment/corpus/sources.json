@@ -1,18 +1,18 @@
 [
   {
     "slug": "1-胸外科专业医疗质量控制指标-2026年版",
-    "title": "胸外科专业医疗质量控制指标",
-    "role": "质控指标",
+    "title": "附件 1",
+    "role": "未分类",
     "keep": false,
-    "reason": "与诊疗分诊无关",
+    "reason": "需人工确认角色",
     "batch": "manual"
   },
   {
     "slug": "1-药事管理专业医疗质量控制指标-2025年版",
-    "title": "药事管理专业医疗质量控制指标",
-    "role": "质控指标",
+    "title": "附件 1",
+    "role": "未分类",
     "keep": false,
-    "reason": "与诊疗分诊无关",
+    "reason": "需人工确认角色",
     "batch": "manual"
   },
   {
@@ -169,50 +169,138 @@
   },
   {
     "slug": "1733999832174_24138",
-    "title": "放射影像专业医疗质量控制指标",
-    "role": "质控指标",
+    "title": "附件 4",
+    "role": "未分类",
     "keep": false,
-    "reason": "与诊疗分诊无关",
+    "reason": "需人工确认角色",
     "batch": "manual"
   },
   {
     "slug": "1733999832354_45241",
-    "title": "门诊管理医疗质量控制指标",
-    "role": "质控指标",
+    "title": "附件 5",
+    "role": "未分类",
     "keep": false,
-    "reason": "与诊疗分诊无关",
+    "reason": "需人工确认角色",
     "batch": "manual"
   },
   {
     "slug": "1733999832561_23284",
-    "title": "急诊医学专业医疗质量控制指标",
-    "role": "质控指标",
+    "title": "附件 1",
+    "role": "未分类",
     "keep": false,
-    "reason": "与诊疗分诊无关",
+    "reason": "需人工确认角色",
     "batch": "manual"
   },
   {
     "slug": "1733999832699_44218",
-    "title": "病理专业医疗质量控制指标",
-    "role": "质控指标",
+    "title": "附件 3",
+    "role": "未分类",
     "keep": false,
-    "reason": "与诊疗分诊无关",
+    "reason": "需人工确认角色",
     "batch": "manual"
   },
   {
     "slug": "1733999832924_85118",
-    "title": "脑损伤评价医疗质量控制指标",
-    "role": "质控指标",
+    "title": "附件 2",
+    "role": "未分类",
     "keep": false,
-    "reason": "与诊疗分诊无关",
+    "reason": "需人工确认角色",
     "batch": "manual"
   },
   {
     "slug": "1733999833111_26793",
-    "title": "医院感染管理医疗质量控制指标",
-    "role": "质控指标",
+    "title": "附件 6",
+    "role": "未分类",
     "keep": false,
-    "reason": "与诊疗分诊无关",
+    "reason": "需人工确认角色",
+    "batch": "manual"
+  },
+  {
+    "slug": "1734003067695_25109",
+    "title": "猩红热诊疗方案",
+    "role": "诊疗方案",
+    "keep": true,
+    "reason": "",
+    "batch": "manual"
+  },
+  {
+    "slug": "1734003067733_26479",
+    "title": "黑热病诊疗方案",
+    "role": "诊疗方案",
+    "keep": true,
+    "reason": "",
+    "batch": "manual"
+  },
+  {
+    "slug": "1734003067772_77837",
+    "title": "发热伴血小板减少综合征诊疗方案",
+    "role": "诊疗方案",
+    "keep": true,
+    "reason": "",
+    "batch": "manual"
+  },
+  {
+    "slug": "1734003068087_98112",
+    "title": "霍乱诊疗方案",
+    "role": "诊疗方案",
+    "keep": true,
+    "reason": "",
+    "batch": "manual"
+  },
+  {
+    "slug": "1734003068133_63694",
+    "title": "流行性脑脊髓膜炎诊疗方案",
+    "role": "诊疗方案",
+    "keep": true,
+    "reason": "",
+    "batch": "manual"
+  },
+  {
+    "slug": "1734003068272_31058",
+    "title": "水痘诊疗方案",
+    "role": "诊疗方案",
+    "keep": true,
+    "reason": "",
+    "batch": "manual"
+  },
+  {
+    "slug": "1734003068348_56939",
+    "title": "鼠疫诊疗方案",
+    "role": "诊疗方案",
+    "keep": true,
+    "reason": "",
+    "batch": "manual"
+  },
+  {
+    "slug": "1734003068417_92469",
+    "title": "百日咳诊疗方案",
+    "role": "诊疗方案",
+    "keep": true,
+    "reason": "",
+    "batch": "manual"
+  },
+  {
+    "slug": "1734003068452_36398",
+    "title": "炭疽诊疗方案",
+    "role": "诊疗方案",
+    "keep": true,
+    "reason": "",
+    "batch": "manual"
+  },
+  {
+    "slug": "1734003068491_61248",
+    "title": "细菌性痢疾诊疗方案",
+    "role": "诊疗方案",
+    "keep": true,
+    "reason": "",
+    "batch": "manual"
+  },
+  {
+    "slug": "1734003068605_77840",
+    "title": "布鲁氏菌病诊疗方案",
+    "role": "诊疗方案",
+    "keep": true,
+    "reason": "",
     "batch": "manual"
   },
   {
@@ -225,26 +313,26 @@
   },
   {
     "slug": "2-临床检验专业医疗质量控制指标-2025年版",
-    "title": "临床检验专业医疗质量控制指标",
-    "role": "质控指标",
+    "title": "附件 2",
+    "role": "未分类",
     "keep": false,
-    "reason": "与诊疗分诊无关",
+    "reason": "需人工确认角色",
     "batch": "manual"
   },
   {
     "slug": "2-日间医疗质量控制指标-2026年版",
-    "title": "日间医疗质量控制指标",
-    "role": "质控指标",
+    "title": "附件 2",
+    "role": "未分类",
     "keep": false,
-    "reason": "与诊疗分诊无关",
+    "reason": "需人工确认角色",
     "batch": "manual"
   },
   {
     "slug": "3-核医学专业医疗质量控制指标-2025年版",
-    "title": "核医学专业医疗质量控制指标",
-    "role": "质控指标",
+    "title": "附件 3",
+    "role": "未分类",
     "keep": false,
-    "reason": "与诊疗分诊无关",
+    "reason": "需人工确认角色",
     "batch": "manual"
   },
   {
