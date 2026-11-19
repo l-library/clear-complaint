@@ -16,6 +16,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+from harness.arms import arm
 from harness.cases import VARIANTS
 
 BASELINE = "V1"
@@ -139,8 +140,11 @@ def summary(
         units = len(subset)
         with_triage = sum(1 for r in subset if _triage(r))
         clarification = sum(1 for r in subset if r.get("status") == "clarification")
-        proposed = sum(len(_names(r)) + _deleted(r) for r in subset)
-        kept = sum(len(_names(r)) for r in subset)
+        # 没过闸门的臂里，「候选」原样保留、删除数为零，通过率恒为 1——那一列在
+        # 那些臂上没有含义，报 nan 比报一个假的 1.00 诚实
+        gate_on = arm(arm_name).citation_gate
+        proposed = sum(len(_names(r)) + _deleted(r) for r in subset) if gate_on else 0
+        kept = sum(len(_names(r)) for r in subset) if gate_on else 0
         # 分母必须是**金标准**要求的红旗，不是检测到的红旗。
         # 用检测结果当分母，检测失败就根本不进分母，漏检率永远为零——这个指标就废了。
         misses = 0

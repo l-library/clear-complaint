@@ -75,6 +75,15 @@ def test_missed_detection_still_counts_against_the_gold() -> None:
     assert row.redflag_miss_rate == 1.0
 
 
+def test_citation_pass_rate_is_nan_when_the_gate_is_off() -> None:
+    """闸门没开的臂上，「通过率」恒为 1，报 nan 比报假的 1.00 诚实。"""
+    records = [_record("c1", "V1", "A0", "m", "clinic", "呼吸内科", kept_conditions=["甲"])]
+
+    rate = metrics.summary(records)[0].citation_pass_rate
+
+    assert rate != rate  # NaN
+
+
 def test_citation_pass_rate_uses_proposed_not_kept() -> None:
     records = [
         _record(

@@ -18,7 +18,7 @@ from pathlib import Path
 
 from harness import cases as case_lib
 from harness import llm, pipeline, retrieval, vocab
-from harness.arms import ARMS
+from harness.arms import ARMS, arm
 
 HERE = Path(__file__).resolve().parent.parent
 RUNS = HERE / "runs"
@@ -60,9 +60,10 @@ def main() -> int:
         json.dumps(
             {
                 "cases": [c.case_id for c in loaded],
-                "arms": arm_names,
+                "arms": {name: arm(name).snapshot() for name in arm_names},
                 "models": models,
                 "reps": args.reps,
+                "corpus": index.meta.get("chunks_sha256"),
                 "tag": args.tag,
             },
             sort_keys=True,

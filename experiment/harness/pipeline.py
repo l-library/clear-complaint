@@ -66,6 +66,7 @@ class Record:
     reasoning_tokens: int = 0
     latency_ms: int = 0
     arm_hash: str = ""
+    corpus_sha: str = ""
     params: dict[str, float | int] = field(default_factory=dict)
 
 
@@ -118,6 +119,7 @@ def run_unit(
         raw_text=raw_text,
         normalized_text=normalize(raw_text),
         arm_hash=current.snapshot(),
+        corpus_sha=str(getattr(index, "meta", {}).get("chunks_sha256", ""))[:16],
         params={
             "temperature": llm.TEMPERATURE,
             "top_p": llm.TOP_P,
