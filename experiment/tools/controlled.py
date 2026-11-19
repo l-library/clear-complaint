@@ -1,0 +1,326 @@
+"""生成三张受控表：红旗清单、候选词表、科室表。
+
+表里每一条都要能追到语料里的原文，所以这个脚本同时是校验器：红旗的引文必须是
+某个片段的逐字子串，候选词表里的每个病名必须能在某个片段里找到。找不到就直接
+失败，不允许把「凭印象写的临床词」写进受控表——那样红旗就成了无出处的规则。
+
+输出：corpus/red_flags.json、corpus/vocab.json、corpus/departments.json
+
+用法：uv run python -m tools.controlled
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent.parent
+CORPUS = HERE / "corpus"
+CHUNKS = CORPUS / "chunks.jsonl"
+
+MAX_VOCAB = 80
+
+
+@dataclass(frozen=True)
+class RedFlag:
+    rule_id: str
+    name: str
+    triggers: tuple[str, ...]
+    quote: str
+
+
+@dataclass(frozen=True)
+class Term:
+    name: str
+    aliases: tuple[str, ...]
+    domain: str
+    department: str
+
+
+# 红旗清单：引文一律取自「重症与危重症标准 / 就医指征 / 急诊指征」章节，命中即急诊。
+# triggers 里既有原文短语，也有口语说法（胸口压得慌、叫不醒），因为用户不会按教材描述。
+RED_FLAGS: tuple[RedFlag, ...] = (
+    RedFlag(
+        "RF01",
+        "意识改变或谵妄",
+        ("意识障碍", "意识模糊", "神志不清", "谵妄", "昏迷", "嗜睡", "叫不醒", "迷迷糊糊"),
+        "烦躁不安、谵妄",
+    ),
+    RedFlag(
+        "RF02",
+        "抽搐或惊厥",
+        ("抽搐", "惊厥", "抽风", "抽筋", "角弓反张"),
+        "意识障碍或惊厥",
+    ),
+    RedFlag(
+        "RF03",
+        "呼吸急促或呼吸困难",
+        ("呼吸困难", "呼吸急促", "气促", "喘不上气", "憋气", "呼吸费力", "喘不过来"),
+        "呼吸急促，RR≥30 次/分",
+    ),
+    RedFlag(
+        "RF04",
+        "血氧下降或发绀",
+        ("发绀", "紫绀", "血氧低", "指氧饱和度低", "嘴唇发紫", "指甲发紫"),
+        "指氧饱和度≤93%",
+    ),
+    RedFlag(
+        "RF05",
+        "三凹征或鼻翼扇动",
+        ("三凹征", "鼻翼扇动", "喘鸣", "喘息", "嗓子响", "喉鸣"),
+        "鼻翼扇动、三凹征、喘鸣或喘息",
+    ),
+    RedFlag(
+        "RF06",
+        "超高热或持续高热超过三天",
+        ("持续高热", "高热不退", "超高热", "烧了三天", "烧退不下来", "持续发烧"),
+        "超高热或持续高热超过 3 天",
+    ),
+    RedFlag(
+        "RF07",
+        "休克征象",
+        (
+            "休克",
+            "血压下降",
+            "四肢厥冷",
+            "肢端湿冷",
+            "手脚冰凉",
+            "脉搏细弱",
+            "面色苍白",
+            "冷汗",
+        ),
+        "休克：心动过速、肢端湿冷、毛细血管充盈时间延长",
+    ),
+    RedFlag(
+        "RF08",
+        "严重出血",
+        ("呕血", "黑便", "便血", "血尿", "阴道出血", "皮下血肿", "牙龈出血", "流血不止"),
+        "严重出血：如皮下血肿、呕血、黑便、阴道出血",
+    ),
+    RedFlag(
+        "RF09",
+        "少尿无尿或重度脱水",
+        ("少尿", "无尿", "尿量减少", "一天没尿", "重度脱水", "尿很少"),
+        "重度脱水，少尿、无尿",
+    ),
+    RedFlag(
+        "RF10",
+        "剧烈腹泻或无法进水",
+        ("频繁呕吐", "呕吐不止", "喝不进水", "不能进食", "吃什么吐什么", "腹泻数十次"),
+        "腹泻数十次或不可计数",
+    ),
+    RedFlag(
+        "RF11",
+        "剧烈头痛伴颈项强直",
+        ("剧烈头痛", "颈项强直", "脖子硬", "低头下巴碰不到胸", "头疼得厉害"),
+        "发热、头痛、呕吐、颈项强直",
+    ),
+    RedFlag(
+        "RF12",
+        "胸痛持续不缓解伴大汗",
+        (
+            "胸痛超过20分钟",
+            "胸痛不缓解",
+            "压榨性胸痛",
+            "胸口压得慌",
+            "胸闷伴大汗",
+            "胸痛伴大汗",
+        ),
+        "发作时间是否较前延长（是否≥20min）",
+    ),
+    RedFlag(
+        "RF13",
+        "晕厥或黑矇",
+        ("晕厥", "昏倒", "黑矇", "黑朦", "眼前发黑", "晕过去"),
+        "头昏、黑朦、晕厥",
+    ),
+    RedFlag(
+        "RF14",
+        "呼吸衰竭",
+        ("呼吸衰竭", "呼吸骤停", "呼吸停止"),
+        "中枢性呼吸衰竭",
+    ),
+    RedFlag(
+        "RF15",
+        "蜇伤或咬伤后过敏反应",
+        ("过敏性休克", "喉头水肿", "全身皮疹伴气促", "蜇伤后全身反应"),
+        "血压下降、脉搏细弱、四肢厥冷",
+    ),
+    RedFlag(
+        "RF16",
+        "中毒型表现",
+        ("中毒型", "高热惊厥", "全身中毒症状", "中毒性休克"),
+        "高热、头痛、剧烈呕吐",
+    ),
+)
+
+# 科室受控表。首推科室只能从这里面选，模型给别的就落到全科医学科。
+DEPARTMENTS: tuple[tuple[str, str], ...] = (
+    ("急诊科", "任何红旗命中时的首推科室"),
+    ("呼吸内科", "咳嗽、咳痰、气促、上呼吸道症状"),
+    ("消化内科", "腹泻、呕吐、腹痛、肝功能异常"),
+    ("心血管内科", "胸痛、胸闷、心悸、血压异常、心衰"),
+    ("神经内科", "头痛、头晕、意识改变、肢体无力"),
+    ("感染科", "发热待查、传染病与隔离治疗"),
+    ("皮肤科", "皮疹、水疱、皮肤瘙痒"),
+    ("儿科", "14 岁以下患者的任何主诉"),
+    ("全科医学科", "症状不典型或跨系统，无法归入专科时"),
+    ("肾内科", "少尿、水肿、慢性肾脏病"),
+    ("内分泌科", "血糖、血脂、甲状腺、肥胖"),
+    ("眼科", "视力下降、眼部症状"),
+    ("普通外科", "腹部包块、疝、乳腺与甲状腺结节"),
+    ("骨科", "外伤、骨与关节损伤"),
+    ("急诊外科", "动物咬伤、蜇伤、伤口处理与疫苗"),
+    ("肿瘤科", "已确诊或高度怀疑恶性肿瘤"),
+    ("精神心理科", "睡眠、情绪、焦虑抑郁相关问题"),
+)
+
+# 候选词表：可能相关情况只能从这里选，上限 80 条。aliases 是口语说法，
+# 用来把「我好像感冒了」这类主诉映射到受控病名。
+VOCAB: tuple[Term, ...] = (
+    # 呼吸道
+    Term("上呼吸道感染", ("感冒", "着凉", "伤风"), "呼吸道症状", "呼吸内科"),
+    Term("流行性感冒", ("流感", "甲流", "乙流"), "呼吸道症状", "呼吸内科"),
+    Term("新型冠状病毒感染", ("新冠", "阳了"), "呼吸道症状", "呼吸内科"),
+    Term("人偏肺病毒感染", ("人偏肺",), "呼吸道症状", "呼吸内科"),
+    Term("支原体肺炎", ("肺炎支原体",), "呼吸道症状", "呼吸内科"),
+    Term("百日咳", ("痉咳", "鸡鸣样咳嗽"), "呼吸道症状", "呼吸内科"),
+    Term("慢性阻塞性肺疾病", ("慢阻肺", "肺气肿"), "呼吸道症状", "呼吸内科"),
+    # 发热待查
+    Term("登革热", ("登革", "蚊子咬的发热"), "发热待查", "感染科"),
+    Term("基孔肯雅热", ("基孔", "关节痛的热"), "发热待查", "感染科"),
+    Term("埃博拉病毒病", ("埃博拉",), "发热待查", "感染科"),
+    Term("尼帕病毒病", ("尼帕",), "发热待查", "感染科"),
+    Term("拉沙热", ("拉沙",), "发热待查", "感染科"),
+    Term("发热伴血小板减少综合征", ("蜱咬热", "SFTS"), "发热待查", "感染科"),
+    Term("鼠疫", ("黑死病", "腺鼠疫"), "发热待查", "感染科"),
+    Term("炭疽", ("皮肤炭疽",), "发热待查", "感染科"),
+    Term("布鲁氏菌病", ("布病", "波状热"), "发热待查", "感染科"),
+    Term("黑热病", ("黑热病",), "发热待查", "感染科"),
+    Term("流行性脑脊髓膜炎", ("流脑",), "发热待查", "感染科"),
+    # 皮疹
+    Term("手足口病", ("手足口",), "皮疹", "儿科"),
+    Term("水痘", ("出水痘", "水花"), "皮疹", "儿科"),
+    Term("猩红热", ("烂喉痧", "草莓舌"), "皮疹", "儿科"),
+    Term("麻疹", ("出疹子", "麻子"), "皮疹", "儿科"),
+    Term("猴痘", ("猴痘",), "皮疹", "感染科"),
+    Term("带状疱疹", ("缠腰龙", "蛇串疮"), "皮疹", "皮肤科"),
+    # 腹泻
+    Term("诺如病毒胃肠炎", ("诺如", "冬季呕吐病"), "腹泻呕吐", "消化内科"),
+    Term("霍乱", ("霍乱", "干性霍乱"), "腹泻呕吐", "感染科"),
+    Term("细菌性痢疾", ("菌痢", "痢疾"), "腹泻呕吐", "消化内科"),
+    Term("急性胃肠炎", ("胃肠炎", "拉肚子", "上吐下泻"), "腹泻呕吐", "消化内科"),
+    # 胸痛心悸
+    Term("冠状动脉粥样硬化性心脏病", ("冠心病", "心绞痛"), "胸痛心悸", "心血管内科"),
+    Term("心房颤动", ("房颤",), "胸痛心悸", "心血管内科"),
+    Term("心力衰竭", ("心衰", "心功能不全"), "胸痛心悸", "心血管内科"),
+    Term("高血压", ("血压高",), "胸痛心悸", "心血管内科"),
+    # 头晕与意识改变
+    Term("脑血管病", ("脑卒中", "中风", "脑梗"), "头晕与意识改变", "神经内科"),
+    Term("病毒性脑膜炎", ("脑膜炎",), "头晕与意识改变", "神经内科"),
+    # 乏力与水肿
+    Term("慢性肾脏病", ("慢性肾病", "肾功能不全"), "乏力与水肿", "肾内科"),
+    Term("自身免疫性溶血性贫血", ("溶血性贫血",), "乏力与水肿", "儿科"),
+    # 伤口与动物致伤
+    Term("狂犬病", ("恐水症",), "伤口与动物致伤", "急诊外科"),
+    Term("犬咬伤", ("狗咬伤", "狗咬"), "伤口与动物致伤", "急诊外科"),
+    Term("猫抓咬伤", ("猫抓伤", "猫咬伤"), "伤口与动物致伤", "急诊外科"),
+    Term("蛇咬伤", ("蛇咬",), "伤口与动物致伤", "急诊外科"),
+    Term("蜂蜇伤", ("蜜蜂蜇", "马蜂蜇"), "伤口与动物致伤", "急诊外科"),
+    Term("蜈蚣咬伤", ("蜈蚣咬",), "伤口与动物致伤", "急诊外科"),
+    Term("蚂蚁蜇伤", ("蚂蚁咬",), "伤口与动物致伤", "急诊外科"),
+    Term("破伤风", ("破伤风",), "伤口与动物致伤", "急诊外科"),
+    # 慢病随访
+    Term("糖尿病", ("血糖高",), "慢病随访", "内分泌科"),
+    Term("血脂异常", ("高血脂",), "慢病随访", "内分泌科"),
+    Term("肥胖", ("肥胖症", "体重超标"), "慢病随访", "内分泌科"),
+    # 肿瘤类
+    Term("乳腺癌", ("乳腺肿瘤",), "慢病随访", "肿瘤科"),
+    Term("甲状腺癌", ("甲状腺肿瘤",), "慢病随访", "肿瘤科"),
+    Term("鼻咽癌", ("鼻咽肿瘤",), "慢病随访", "肿瘤科"),
+)
+
+
+def _chunks() -> list[dict[str, str]]:
+    return [json.loads(line) for line in CHUNKS.read_text(encoding="utf-8").splitlines() if line]
+
+
+def _locate(chunks: list[dict[str, str]], needle: str) -> str | None:
+    for chunk in chunks:
+        if needle in chunk["text"]:
+            return chunk["chunk_id"]
+    return None
+
+
+def main() -> int:
+    chunks = _chunks()
+    departments = {name for name, _ in DEPARTMENTS}
+
+    # 受控表不允许写「凭印象的临床词」：每条都要能在语料里指到原文，否则红旗就是
+    # 无出处的规则，候选词就是不可引用的结论。缺失项一次全部报出来再修。
+    missing: list[str] = []
+    red_flags = []
+    for rule in RED_FLAGS:
+        chunk_id = _locate(chunks, rule.quote)
+        if chunk_id is None:
+            missing.append(f"红旗 {rule.rule_id} 引文：{rule.quote}")
+            continue
+        red_flags.append(
+            {
+                "rule_id": rule.rule_id,
+                "name": rule.name,
+                "level": "emergency",
+                "triggers": list(rule.triggers),
+                "quote": rule.quote,
+                "chunk_id": chunk_id,
+            }
+        )
+
+    vocab = []
+    for term in VOCAB:
+        if term.department not in departments:
+            raise SystemExit(f"[error] 科室不在受控表里: {term.department}")
+        chunk_id = _locate(chunks, term.name)
+        if chunk_id is None:
+            missing.append(f"候选词：{term.name}")
+            continue
+        vocab.append(
+            {
+                "name": term.name,
+                "aliases": list(term.aliases),
+                "domain": term.domain,
+                "department": term.department,
+                "chunk_id": chunk_id,
+            }
+        )
+    if missing:
+        for item in missing:
+            print(f"[missing] {item}")
+        print(f"[error] {len(missing)} 条在语料里找不到出处，先去重命名或补语料")
+        return 1
+    if len(vocab) > MAX_VOCAB:
+        raise SystemExit(f"[error] 候选词表 {len(vocab)} 条，超过上限 {MAX_VOCAB}")
+
+    (CORPUS / "red_flags.json").write_text(
+        json.dumps({"version": 1, "rules": red_flags}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (CORPUS / "vocab.json").write_text(
+        json.dumps({"version": 1, "max": MAX_VOCAB, "terms": vocab}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (CORPUS / "departments.json").write_text(
+        json.dumps(
+            {"version": 1, "departments": [{"name": n, "note": d} for n, d in DEPARTMENTS]},
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    print(f"[info] 红旗 {len(red_flags)} 条，候选词 {len(vocab)} 条，科室 {len(departments)} 个")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

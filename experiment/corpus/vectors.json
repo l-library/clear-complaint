@@ -1,0 +1,9 @@
+{
+  "model": "bge-m3",
+  "dim": 1024,
+  "count": 541,
+  "normalized": true,
+  "chunks_sha256": "d6671e3e4770285fa80cb362ebef381bb64fda5ade7139d12a711b89315f98aa",
+  "pool": "clinical only",
+  "text_template": "title｜heading｜text"
+}

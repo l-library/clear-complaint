@@ -10,6 +10,7 @@
 
 | 目录 | 内容 | 入仓库 |
 |---|---|---|
+| `tools/` | 抓取与构建脚本 | 是 |
 | `corpus/` | 指南片段、冻结向量、候选词表、科室表、红旗清单 | 是 |
 | `cases/` | 病例、五个变体、金标准、签核记录 | 是 |
 | `harness/` | 归一化、红旗、检索、引用与模板校验、模型客户端 | 是 |
@@ -22,7 +23,29 @@
 
 ## 当前状态
 
-只有本文件。第一个代码任务是语料可达性实测：扫 `gov.cn` 政策文件库、抓候选 PDF、按主诉域统计可切分片段数，产出「域 × 片段数」表。主诉域的数量由这张表决定，见 [docs/stage1.md](../docs/stage1.md) 的「语料」一节。
+语料已锁定九个病种域，51 份文件、1373 条条款，覆盖表在 `corpus/probe_ingested.md`。域的口径是病种而非症状，理由见 [docs/stage1.md](../docs/stage1.md) 的「语料」一节。
+
+两轮的实测结论：
+
+- `corpus/probe_report.md`：`gov.cn` 政策文件库只对上呼吸道、发热、腹泻、皮疹四个症状域给出充足片段，头痛为零。这是换源与改域口径的依据，报告留着做对照。
+- `corpus/download_list.md`：`nhc.gov.cn` 上找到的 45 份诊疗类文件清单，覆盖的域多得多（脑血管病、急性冠脉综合征、房颤、心衰、慢阻肺、肥胖症、诺如、尼帕、埃博拉等）。
+
+`nhc.gov.cn` 正文页有瑞数动态防护：真实 Chromium 预热拿到 cookie 后能取到 200 全文，但连续自动化请求会被升级拦截（412 → 400）。所以正文与附件改由人工下载到 `corpus/raw/`，分片与统计全部离线，不依赖反爬。
+
+```bash
+cd experiment
+uv sync
+uv run python -m tools.ingest --ocr        # 抽正文，扫描件走 PaddleOCR（需 PADDLEOCR_ACCESS_TOKEN）
+uv run python -m tools.fetch_govcn         # 从政策文件库补齐传染病诊疗方案
+uv run python -m tools.chunk               # 切片，产出 corpus/chunks.jsonl
+uv run python -m tools.controlled          # 三张受控表，每条都要能在语料里指到原文
+uv run python -m tools.embed               # 冻结向量，需 EMBED_API_KEY 或 MAAS_API_KEY
+uv run python -m tools.embed --check       # 校验向量与 chunks 是否一致
+uv run python -m tools.probe_ingested      # 病种覆盖表，离线
+uv run python -m tools.list_candidates     # 新的下载清单，只碰站点搜索接口
+```
+
+`.cache/` 存原始 PDF 与响应，体积大，不入仓库；`corpus/*.json` 记录了来源 URL 与条款数，重跑据此可复现。
 
 ## 凭据
 
