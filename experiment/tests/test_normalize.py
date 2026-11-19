@@ -43,3 +43,36 @@ def test_split_attribution_keeps_plain_complaints_intact() -> None:
 
     assert attribution is None
     assert remainder == text
+
+
+def test_pinyin_folds_back_to_hanzi() -> None:
+    """V5 变体的整条约束就是「归一化能折回去」，折不了这条约束等于没测。"""
+    folded = normalize("shou上jiao上起了小水pao，嘴chun发紫")
+
+    assert "水疱" in folded
+    assert "手上" in folded
+    assert "嘴唇" in folded
+    assert not any(token.isascii() for token in folded)
+
+
+def test_longer_pinyin_tokens_win() -> None:
+    """按长度从长到短替换：否则 ke 会把 keng 吃成「咳ng」。"""
+    assert "坑" in normalize("按下去一个keng")
+    assert normalize("睡gou了") == normalize("睡够了")
+    assert normalize("被gou咬了") == normalize("被狗咬了")
+
+
+def test_no_case_leaves_pinyin_behind() -> None:
+    """拿病例集当回归：V5 归一化之后不该再有拉丁字母残留。"""
+    import json
+    import re
+    from pathlib import Path
+
+    cases = Path(__file__).resolve().parent.parent / "cases"
+    for name in ("drafts.jsonl", "pilot.jsonl"):
+        for line in (cases / name).read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            folded = normalize(row["variants"]["V5"])
+            assert not re.findall(r"[a-z]{2,}", folded), row["case_id"]

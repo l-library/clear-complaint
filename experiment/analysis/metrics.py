@@ -126,7 +126,10 @@ def cluster_bootstrap(
     return means[int(0.025 * rounds)], means[int(0.975 * rounds)]
 
 
-def summary(records: list[dict[str, object]]) -> list[Summary]:
+def summary(
+    records: list[dict[str, object]],
+    expected_red_flags: dict[str, list[str]] | None = None,
+) -> list[Summary]:
     rows: list[Summary] = []
     groups: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
     for record in records:
@@ -138,10 +141,17 @@ def summary(records: list[dict[str, object]]) -> list[Summary]:
         clarification = sum(1 for r in subset if r.get("status") == "clarification")
         proposed = sum(len(_names(r)) + _deleted(r) for r in subset)
         kept = sum(len(_names(r)) for r in subset)
+        # 分母必须是**金标准**要求的红旗，不是检测到的红旗。
+        # 用检测结果当分母，检测失败就根本不进分母，漏检率永远为零——这个指标就废了。
         misses = 0
         expected = 0
         for record in subset:
-            if record.get("red_flags"):
+            detected = record.get("red_flags")
+            if expected_red_flags is not None:
+                wants: list[str] = expected_red_flags.get(str(record["case_id"]), [])
+            else:
+                wants = [str(item) for item in detected] if isinstance(detected, list) else []
+            if wants:
                 expected += 1
                 misses += int(_triage(record) != "emergency")
         rows.append(
@@ -160,9 +170,21 @@ def summary(records: list[dict[str, object]]) -> list[Summary]:
     return rows
 
 
-def main(path: Path) -> int:
+def gold_red_flags(cases_path: Path) -> dict[str, list[str]]:
+    return {
+        str(row["case_id"]): [str(item) for item in row["gold"]["red_flags"]]
+        for row in (
+            json.loads(line)
+            for line in cases_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
+        if row.get("gold")
+    }
+
+
+def main(path: Path, cases_path: Path | None = None) -> int:
     records = load(path)
-    rows = summary(records)
+    rows = summary(records, gold_red_flags(cases_path) if cases_path else None)
 
     print(
         "| 臂 | 模型 | 片段数 | 有效率 | 档位一致率 | 科室一致率 | 澄清率 | 引用通过 | 红旗漏检 |"
@@ -189,4 +211,6 @@ def main(path: Path) -> int:
 if __name__ == "__main__":
     import sys
 
-    raise SystemExit(main(Path(sys.argv[1])))
+    run_path = Path(sys.argv[1])
+    default_cases = Path(__file__).resolve().parent.parent / "cases" / "pilot.jsonl"
+    raise SystemExit(main(run_path, default_cases))

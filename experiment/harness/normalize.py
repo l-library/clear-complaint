@@ -12,17 +12,59 @@ from __future__ import annotations
 import re
 import unicodedata
 
-# 拼音与错别字：只在口语变体里出现，替换后与书面词同形
-TYPO_MAP: dict[str, str] = {
-    "tong": "痛",
-    "tou": "头",
-    "du": "肚",
-    "shao": "烧",
-    "liu": "流",
-    "ke": "咳",
-    "sang": "嗓",
-    "zi": "子",
-}
+# 拼音与错别字：口语变体里出现，替换后与书面词同形。
+#
+# 两点教训：一是必须按长度从长到短替换，否则 "ke" 会把 "keng" 吃成「咳ng」；
+# 二是含义不唯一的音节只能按词组替换（"gou" 可以是够也可以是狗，"li" 可以是厉
+# 也可以是里），单字替换会把别的词改坏。
+PINYIN_MAP: tuple[tuple[str, str], ...] = (
+    ("睡gou", "睡够"),
+    ("被gou", "被狗"),
+    ("beima", "被马"),
+    ("jiangya", "降压"),
+    ("不shu服", "不舒服"),
+    ("嘴chun", "嘴唇"),
+    ("心huang", "心慌"),
+    ("两条tui", "两条腿"),
+    ("一个keng", "一个坑"),
+    ("小水pao", "小水疱"),
+    ("水pao", "水疱"),
+    ("shou上", "手上"),
+    ("jiao上", "脚上"),
+    ("xiao时", "小时"),
+    ("xiao腿", "小腿"),
+    ("头yun", "头晕"),
+    ("想shui", "想睡"),
+    ("分zhong", "分钟"),
+    ("容易lei", "容易累"),
+    ("总觉得lei", "总觉得累"),
+    ("总lei", "总累"),
+    ("tiao得", "跳得"),
+    ("laduzi", "拉肚子"),
+    ("四五ci", "四五次"),
+    ("红zhen子", "红疹子"),
+    ("xiong口", "胸口"),
+    ("二十fen钟", "二十分钟"),
+    ("点xue", "点血"),
+    ("又teng", "又疼"),
+    ("红dian", "红点"),
+    ("shen上", "身上"),
+    ("不太yang", "不太痒"),
+    ("di热", "低热"),
+    ("fa烧", "发烧"),
+    ("fa热", "发热"),
+    ("hen少", "很少"),
+    ("li害", "厉害"),
+    ("zhe了", "蜇了"),
+    ("chuan得", "喘得"),
+    ("tong", "痛"),
+    ("tou", "头"),
+    ("du", "肚"),
+    ("shao", "烧"),
+    ("liu", "流"),
+    ("sang", "嗓"),
+    ("zi", "子"),
+)
 
 # 口语词到临床词。左边是患者会说的，右边是文件里会写的。
 # 顺序有意义：长短语先替换，否则「拉肚子」会被「肚子」先吃掉。
@@ -73,7 +115,7 @@ def fold_chars(text: str) -> str:
 def normalize(text: str) -> str:
     """口语归一化：字符统一之后再折错别字与口语词。红旗与检索用这一层。"""
     folded = fold_chars(text)
-    for wrong, right in TYPO_MAP.items():
+    for wrong, right in sorted(PINYIN_MAP, key=lambda pair: -len(pair[0])):
         folded = folded.replace(wrong, right)
     for colloquial, clinical in COLLOQUIAL_MAP:
         folded = folded.replace(colloquial, clinical)

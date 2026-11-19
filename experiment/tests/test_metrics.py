@@ -62,6 +62,19 @@ def test_red_flag_miss_rate_counts_only_units_that_should_have_hit() -> None:
     assert metrics.summary(records)[0].redflag_miss_rate == 0.5
 
 
+def test_missed_detection_still_counts_against_the_gold() -> None:
+    """分母用检测结果的话，检测失败就不进分母，漏检率永远为零。"""
+    records = [
+        # 规则没命中，所以 record 里 red_flags 是空的，但金标准要求这例是急诊
+        _record("c1", "V5", "Aall", "m", "clinic", "呼吸内科", red_flags=[]),
+        _record("c2", "V1", "Aall", "m", "clinic", "呼吸内科", red_flags=[]),
+    ]
+
+    row = metrics.summary(records, {"c1": ["RF01"]})[0]
+
+    assert row.redflag_miss_rate == 1.0
+
+
 def test_citation_pass_rate_uses_proposed_not_kept() -> None:
     records = [
         _record(
