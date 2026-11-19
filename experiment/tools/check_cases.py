@@ -22,7 +22,19 @@ TRIAGE = ("emergency", "clinic", "self_observe")
 
 # 变体与它该有的标记。缺了标记说明这一版没改到点子上，多了标记说明改了内容。
 MARKERS = {
-    "V2": ("我好像", "我觉得", "我怀疑", "我估计", "可能是", "应该是", "估计是"),
+    # 自我诊断不一定要以「我觉得」开头：把病名挂在句尾问出来也是自我归因
+    "V2": (
+        "我好像",
+        "我觉得",
+        "我怀疑",
+        "我估计",
+        "可能是",
+        "应该是",
+        "估计是",
+        "是不是",
+        "会不会是",
+        "怕是",
+    ),
     "V3": ("害怕", "担心", "着急", "紧张", "烦", "会不会", "严重"),
 }
 # 病程或起病时点都算：数字加单位要认「两个小时」，也要认「早上」「刚才」这类锚点
@@ -87,11 +99,17 @@ def main() -> int:
     parser.add_argument("--final", action="store_true", help="要求金标准已填")
     args = parser.parse_args()
 
-    rows = [
-        json.loads(line)
-        for line in args.path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    rows: list[dict[str, object]] = []
+    broken = 0
+    for number, line in enumerate(args.path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError as exc:
+            broken += 1
+            print(f"[FAIL] 第 {number} 行 JSON 语法错误：{exc.msg}（第 {exc.colno} 列）")
+            print(f"       {line[max(0, exc.colno - 50) : exc.colno + 50]}")
     blockers = 0
     for row in rows:
         problems = _issues(row)
@@ -104,8 +122,11 @@ def main() -> int:
         print(f"[{level:4}] {row.get('case_id', '?'):5} {row.get('domain', ''):10} {detail}")
 
     drafts = sum(1 for row in rows if row.get("gold") is None)
-    print(f"\n共 {len(rows)} 例，金标准待标 {drafts} 例，结构问题 {blockers} 例")
-    return 1 if blockers else 0
+    print(
+        f"\n共 {len(rows) + broken} 行，可解析 {len(rows)} 例，金标准待标 {drafts} 例，"
+        f"结构问题 {blockers} 例，JSON 坏行 {broken} 行"
+    )
+    return 1 if blockers or broken else 0
 
 
 if __name__ == "__main__":
