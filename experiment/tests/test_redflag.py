@@ -33,3 +33,9 @@ def test_every_rule_keeps_its_source() -> None:
     for rule in redflag.rules():
         assert rule.chunk_id
         assert rule.quote
+
+
+def test_colloquial_chest_pain_phrasings_all_hit() -> None:
+    """患者不会说「胸痛」：胸口疼、心口疼、胸口痛都要命中同一条规则。"""
+    for text in ("胸口疼，出汗二十分钟了", "心口疼得厉害", "胸口痛，闷得慌"):
+        assert "RF12" in {hit.rule_id for hit in redflag.detect(text)}, text

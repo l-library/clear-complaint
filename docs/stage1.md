@@ -99,6 +99,8 @@ topk=5，不设分数阈值（阈值会吃掉召回，而且没法解释这个�
 
 规模 20 例，按实测锁定的域均摊。材料里必须写明「金标准由三名工科生基于公开指南合议，非临床金标准」。
 
+`cases/pilot.jsonl` 已给出四例样例（呼吸道、腹泻、皮疹、胸痛各一例，含画像、五个变体与金标准），`harness/cases.py` 负责载入与校验：变体必须齐五个、金标准档位与科室必须在受控枚举内、**V4 里不许再出现病程细节**（否则变体改的就不只是表述）。剩下 16 例照这个格式写。
+
 ## 变体族
 
 五族，人工撰写，不用模型生成——变体若是模型的产物，「表述差异」里就混进了模型偏好。
@@ -137,6 +139,17 @@ topk=5，不设分数阈值（阈值会吃掉召回，而且没法解释这个�
 | 澄清触发率、有效率 | 触发澄清的单元占比、有档位单元的占比 | 与一致率并列 |
 
 澄清会让单元没有档位，所以一致率的分母是「有档位的单元」。不并列报触发率与有效率，一致率就能靠样本被抽稀而虚高。
+
+## 执行与出数
+
+```bash
+cd experiment
+uv run python -m tools.run_matrix --cases pilot --arms A0,Aall --reps 1 --models 1
+uv run python -m analysis.metrics runs/pilot-xxxxxxxx.jsonl
+uv run python -m analysis.figures runs/pilot-xxxxxxxx.jsonl
+```
+
+`run_matrix` 只追加、可续跑：已存在的 `unit_id` 跳过，中断重跑不会重复烧配额。`analysis/` 全部从 JSONL 重算，图不是手画的——换一批记录重跑就得到新图，材料里的数字与图因此对得上。
 
 ## 统计
 
