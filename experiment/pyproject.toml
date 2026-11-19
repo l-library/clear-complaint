@@ -37,5 +37,5 @@ known-first-party = ["tools", "harness"]
 
 [tool.mypy]
 python_version = "3.14"
-files = ["tools", "tests"]
+files = ["tools", "harness", "tests"]
 strict = true
