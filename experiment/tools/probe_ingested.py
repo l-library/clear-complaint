@@ -13,7 +13,7 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from tools import fetch
+from tools import fetch, roles
 
 HERE = Path(__file__).resolve().parent.parent
 CORPUS = HERE / "corpus"
@@ -53,16 +53,6 @@ CITABLE_SECTIONS = (
 MIN_CLAUSE, MAX_CLAUSE = 30, 600
 MIN_PER_DOMAIN = 12
 
-# 角色判定：质控指标是医院管理指标，不是诊疗内容，一律不入语料
-ROLE_RULES: tuple[tuple[str, str], ...] = (
-    ("质量控制指标", "质控指标"),
-    ("重点任务及服务流程图", "流程图"),
-    ("分级诊疗", "分级诊疗"),
-    ("诊疗方案", "诊疗方案"),
-    ("诊疗规范", "诊疗规范"),
-    ("健康服务规范", "健康服务规范"),
-)
-
 
 @dataclass
 class Source:
@@ -72,17 +62,6 @@ class Source:
     keep: bool
     reason: str
     batch: str
-
-
-def _classify(title: str, slug: str) -> tuple[str, bool, str]:
-    for needle, role in ROLE_RULES:
-        if needle in title:
-            if role in {"质控指标", "流程图"}:
-                return role, False, "与诊疗分诊无关"
-            return role, True, ""
-    if "诊疗规范" in slug:
-        return "诊疗规范", True, ""
-    return "未分类", False, "需人工确认角色"
 
 
 def _domain_hits(text: str) -> set[str]:
@@ -102,7 +81,7 @@ def main() -> int:
         for entry in json.loads(path.read_text(encoding="utf-8")):
             if entry["status"] != "ok":
                 continue
-            role, keep, reason = _classify(entry["title"], entry["slug"])
+            role, keep, reason = roles.classify(entry["title"], entry["slug"])
             sources.append(Source(entry["slug"], entry["title"], role, keep, reason, batch))
 
     (CORPUS / "sources.json").write_text(
