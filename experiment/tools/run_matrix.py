@@ -30,13 +30,18 @@ def _departments() -> list[str]:
 
 
 def _done(path: Path) -> set[str]:
+    """已完成单元。进程被强杀时最后一行可能是半截，跳过它继续续跑，而不是整轮崩掉。"""
     if not path.exists():
         return set()
-    return {
-        json.loads(line)["unit_id"]
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    }
+    done: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            done.add(str(json.loads(line)["unit_id"]))
+        except json.JSONDecodeError, KeyError:
+            print("[warn] 跳过一行不完整的记录（上次中断留下的）")
+    return done
 
 
 def main() -> int:
@@ -51,6 +56,16 @@ def main() -> int:
 
     arm_names = [name.strip() for name in args.arms.split(",") if name.strip()]
     models = list(llm.BENCH[: args.models])
+
+    # 起跑预检：上一次 glm-5.2 跑到一半被冻结（403 ModelArts.81006），
+    # 720 格全部烧成 api_error 才发现。先各打一次，不通就别开跑。
+    for model in models:
+        try:
+            llm.chat(model, [{"role": "user", "content": "回一个字：好"}], max_tokens=64)
+        except llm.LLMError as exc:
+            print(f"[error] {model} 预检失败：{exc}")
+            return 1
+        print(f"[info] {model} 预检通过")
     loaded = case_lib.load(HERE / "cases" / f"{args.cases}.jsonl")
     departments = _departments()
     known = vocab.known_terms()
@@ -65,6 +80,7 @@ def main() -> int:
                 "reps": args.reps,
                 "corpus": index.meta.get("chunks_sha256"),
                 "vocab": hashlib.sha256((HERE / "corpus" / "vocab.json").read_bytes()).hexdigest(),
+                "max_tokens": llm.MAX_TOKENS,
                 "tag": args.tag,
             },
             sort_keys=True,
@@ -85,6 +101,9 @@ def main() -> int:
     pending = [u for u in units if _unit_id(*u) not in finished]
     print(f"[info] 总计 {len(units)} 格，已完成 {len(finished)}，待跑 {len(pending)} → {out.name}")
 
+    class Frozen(RuntimeError):
+        """资源被冻结时继续跑只会把剩余格子烧成错误记录，直接中止。"""
+
     def work(unit: tuple[case_lib.Case, str, str, str, int]) -> str:
         case, variant, arm_name, model, repetition = unit
         record = pipeline.run_unit(
@@ -98,6 +117,8 @@ def main() -> int:
             departments=departments,
             index=index,
         )
+        if record.status == "api_error" and "frozen" in record.draft_raw.lower():
+            raise Frozen(f"{model}: {record.draft_raw[:120]}")
         return pipeline.dump(record)
 
     started = time.monotonic()

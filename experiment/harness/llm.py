@@ -21,12 +21,15 @@ from dataclasses import dataclass
 
 DEFAULT_BASE_URL = "https://api.modelarts-maas.com/openai/v1"
 # 异构配对的判据是「不同厂商 + 能在可接受预算内出合法 JSON」。
-# deepseek-v4.1-flash-1017 约 5 秒、glm-5.2 约 44 秒（推理型），两者都实测通过。
+# 第二席曾因资源冻结临时换成盘古（403 ModelArts.81006），充值解冻后换回 glm-5.2：
+# 盘古中位 43 秒、最长 316 秒，做 1200 格会把全量拖到九小时以上。
 BENCH = ("deepseek-v4.1-flash-1017", "glm-5.2")
 
 TEMPERATURE = 0.7
 TOP_P = 1.0
-MAX_TOKENS = 4096
+# 4096 不够：deepseek 在同一提示词下 reasoning 会顶到 4022，JSON 被截断成 parse_error。
+# 全量跑到 394 格时 15 个 parse_error 全是这个原因，所以抬到 8192。
+MAX_TOKENS = 8192
 
 
 class LLMError(RuntimeError):

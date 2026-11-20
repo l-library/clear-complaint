@@ -54,6 +54,11 @@ def resolve(name: str) -> Term | None:
     return best
 
 
+def names() -> list[str]:
+    """受控病名。提示词里只给规范名：别名是给归一化用的，不该进输出契约。"""
+    return sorted(term.name for term in terms())
+
+
 def known_terms() -> set[str]:
     """给输入侧归因摘除用的词面集合。"""
     return set(_known())

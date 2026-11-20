@@ -54,3 +54,19 @@ def test_search_returns_at_most_k_and_only_clinical_chunks(
     assert len(passages) == 3
     for passage in passages:
         assert index._rows[passage.chunk_id]["role"] == "clinical"
+
+
+def test_partial_tail_line_does_not_break_resume(tmp_path: object) -> None:
+    """进程被强杀时最后一行可能是半截，续跑要跳过它而不是整轮崩掉。"""
+    import json
+    from pathlib import Path
+
+    from tools import run_matrix
+
+    path = Path(str(tmp_path)) / "run.jsonl"
+    path.write_text(
+        json.dumps({"unit_id": "c1-V1-A0-m-r1"}) + "\n" + '{"unit_id": "c1-V2-A0-m',
+        encoding="utf-8",
+    )
+
+    assert run_matrix._done(path) == {"c1-V1-A0-m-r1"}
