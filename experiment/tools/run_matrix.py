@@ -131,7 +131,13 @@ def main() -> int:
             handle.flush()
             if count % 10 == 0:
                 print(f"[info] {count}/{len(pending)}  用时 {time.monotonic() - started:.0f}s")
-    print(f"[info] 完成，写入 {out}")
+    tokens = 0
+    for line in out.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        tokens += int(row.get("prompt_tokens") or 0) + int(row.get("completion_tokens") or 0)
+    print(f"[info] 完成，写入 {out}；已记录 {tokens} tokens")
     return 0
 
 

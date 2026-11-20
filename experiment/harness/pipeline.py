@@ -64,6 +64,8 @@ class Record:
     template_ok: bool = False
     status: str = "ok"
     reasoning_tokens: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
     latency_ms: int = 0
     arm_hash: str = ""
     corpus_sha: str = ""
@@ -166,6 +168,8 @@ def run_unit(
 
     record.draft_raw = completion.content
     record.reasoning_tokens = completion.reasoning_tokens
+    record.prompt_tokens = completion.prompt_tokens
+    record.completion_tokens = completion.completion_tokens
     record.latency_ms = completion.latency_ms
     record.draft = parse_draft(completion.content)
     if record.draft is None:
