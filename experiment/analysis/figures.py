@@ -153,7 +153,7 @@ def main() -> int:
 
     _setup_font()
     OUT.mkdir(parents=True, exist_ok=True)
-    records = [record for path in args.runs for record in metrics.load(path)]
+    records = metrics.dedupe([record for path in args.runs for record in metrics.load(path)])
     cases_dir = Path(__file__).resolve().parent.parent / "cases"
     gold: dict[str, str] = {}
     for name in ("pilot.jsonl", "drafts.jsonl"):

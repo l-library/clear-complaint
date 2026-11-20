@@ -37,6 +37,17 @@ class Summary:
     redflag_miss_rate: float
 
 
+def dedupe(records: list[dict[str, object]]) -> list[dict[str, object]]:
+    """同一个 unit_id 只留最后一条。
+
+    改写某个变体之后重跑，会产生与旧记录同 id 的新记录；合并分析时后者为准。
+    """
+    latest: dict[str, dict[str, object]] = {}
+    for record in records:
+        latest[str(record["unit_id"])] = record
+    return list(latest.values())
+
+
 def load(path: Path) -> list[dict[str, object]]:
     return [
         json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
@@ -216,7 +227,7 @@ if __name__ == "__main__":
 
     # 支持一次给多个 run 文件：4 例与 16 例是分两批跑的，分析时合并
     paths = [Path(item) for item in sys.argv[1:]] or [Path("runs/pilot-8a7591d1.jsonl")]
-    records = [record for path in paths for record in load(path)]
+    records = dedupe([record for path in paths for record in load(path)])
     cases_dir = Path(__file__).resolve().parent.parent / "cases"
     gold: dict[str, list[str]] = {}
     for name in ("pilot.jsonl", "drafts.jsonl"):

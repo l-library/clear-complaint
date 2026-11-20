@@ -51,10 +51,12 @@ def main() -> int:
     parser.add_argument("--reps", type=int, default=3)
     parser.add_argument("--models", type=int, default=2, help="取 BENCH 里前几个模型")
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--variants", default=",".join(case_lib.VARIANTS))
     parser.add_argument("--tag", default="")
     args = parser.parse_args()
 
     arm_names = [name.strip() for name in args.arms.split(",") if name.strip()]
+    variants = [name.strip() for name in args.variants.split(",") if name.strip()]
     models = list(llm.BENCH[: args.models])
 
     # 起跑预检：上一次 glm-5.2 跑到一半被冻结（403 ModelArts.81006），
@@ -75,6 +77,12 @@ def main() -> int:
         json.dumps(
             {
                 "cases": [c.case_id for c in loaded],
+                # 病例文本本身也要进指纹：改写某个变体而 case_id 不变时，
+                # 只按 id 算指纹会让重跑把新文本的格子当成"已完成"跳过
+                "cases_sha": hashlib.sha256(
+                    (HERE / "cases" / f"{args.cases}.jsonl").read_bytes()
+                ).hexdigest(),
+                "variants": variants,
                 "arms": {name: arm(name).snapshot() for name in arm_names},
                 "models": models,
                 "reps": args.reps,
@@ -93,7 +101,7 @@ def main() -> int:
     units = [
         (case, variant, arm_name, model, repetition)
         for case in loaded
-        for variant in case_lib.VARIANTS
+        for variant in variants
         for arm_name in arm_names
         for model in models
         for repetition in range(1, args.reps + 1)
