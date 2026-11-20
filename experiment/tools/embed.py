@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -33,6 +34,11 @@ CACHE = HERE / ".cache" / "embed"
 DEFAULT_BASE_URL = "https://api.modelarts-maas.com/v1"
 DEFAULT_MODEL = "bge-m3"
 BATCH_SIZE = 16
+# 服务端限流 4 次/秒（ModelArts.81101），多线程跑矩阵时靠这个闸门排队，
+# 而不是靠撞 429 再退避
+MIN_INTERVAL = 0.30
+_THROTTLE = threading.Lock()
+_LAST_CALL = 0.0
 
 
 class EmbedError(RuntimeError):
@@ -52,6 +58,15 @@ def _config() -> tuple[str, str, str]:
     return base, key, model
 
 
+def _wait_turn() -> None:
+    global _LAST_CALL
+    with _THROTTLE:
+        gap = time.monotonic() - _LAST_CALL
+        if gap < MIN_INTERVAL:
+            time.sleep(MIN_INTERVAL - gap)
+        _LAST_CALL = time.monotonic()
+
+
 def _request(texts: list[str]) -> list[list[float]]:
     base, key, model = _config()
     body = json.dumps({"model": model, "input": texts}).encode()
@@ -62,20 +77,25 @@ def _request(texts: list[str]) -> list[list[float]]:
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
     )
     last: Exception | None = None
-    for attempt in range(3):
+    for attempt in range(6):
+        _wait_turn()
         try:
             with urllib.request.urlopen(request, timeout=120) as response:
                 payload = json.loads(response.read().decode("utf-8"))
             rows = sorted(payload["data"], key=lambda row: row["index"])
             return [list(row["embedding"]) for row in rows]
         except urllib.error.HTTPError as exc:
-            last = exc
-            detail = exc.read().decode("utf-8", "ignore")[:200]
+            detail = exc.read().decode("utf-8", "ignore")[:160]
+            # 429 是限流，重试就好；其他 4xx 是我们自己的问题，重试无意义
+            if exc.code == 429 or exc.code >= 500:
+                last = exc
+                time.sleep(1.5 * (attempt + 1))
+                continue
             raise EmbedError(f"向量化失败 {exc.code}: {detail}") from exc
         except Exception as exc:  # noqa: BLE001 - 网络抖动重试
             last = exc
             time.sleep(2 * (attempt + 1))
-    raise EmbedError(f"向量化失败: {last}")
+    raise EmbedError(f"向量化失败（重试 6 次仍不通）: {last}")
 
 
 def _cached(texts: list[str]) -> list[list[float]]:

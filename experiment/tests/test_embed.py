@@ -55,3 +55,33 @@ def test_missing_credentials_is_reported_not_silently_empty(
 
     with pytest.raises(embed.EmbedError, match="EMBED_API_KEY"):
         embed._config()
+
+
+def test_rate_limit_is_retried_not_fatal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """服务端限流 4 次/秒；把它当致命错误会让整轮矩阵挂掉。"""
+    import urllib.error
+
+    calls = {"n": 0}
+
+    class FakeResponse:
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"data": [{"index": 0, "embedding": [1.0, 2.0]}]}'
+
+    def fake_urlopen(*args: object, **kwargs: object) -> FakeResponse:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise urllib.error.HTTPError("u", 429, "too many", {}, None)  # type: ignore[arg-type]
+        return FakeResponse()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setenv("EMBED_API_KEY", "x")
+    monkeypatch.setattr(embed, "MIN_INTERVAL", 0.0)
+
+    assert embed._request(["甲"]) == [[1.0, 2.0]]
+    assert calls["n"] == 2
