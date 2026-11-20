@@ -54,9 +54,13 @@ def load(path: Path) -> list[dict[str, object]]:
     ]
 
 
+TRIAGE_LEVELS = ("emergency", "clinic", "self_observe")
+
+
 def _triage(record: dict[str, object]) -> str | None:
+    """只认枚举内的档位。模型偶尔写中文值，那等于没给出合法档位。"""
     value = record.get("triage")
-    return value if isinstance(value, str) else None
+    return value if isinstance(value, str) and value in TRIAGE_LEVELS else None
 
 
 def _department(record: dict[str, object]) -> str | None:

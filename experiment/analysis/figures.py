@@ -24,6 +24,14 @@ OUT = Path(__file__).resolve().parent / "figures"
 TRIAGE_ORDER = ("emergency", "clinic", "self_observe")
 TRIAGE_LABEL = {"emergency": "急诊", "clinic": "门诊", "self_observe": "自我观察"}
 RANK = {"self_observe": 0, "clinic": 1, "emergency": 2}
+
+
+def _level(record: dict[str, object]) -> str | None:
+    """只认枚举内的档位，非法值一律当作没有档位，避免图表被脏值带崩。"""
+    value = record.get("triage")
+    return value if isinstance(value, str) and value in RANK else None
+
+
 # 降级方向：按危险程度排序，最危险的（急诊判成自我观察）放最上面
 DOWNGRADE_KINDS = (
     ("emergency", "self_observe"),
@@ -54,7 +62,7 @@ def _variant_heat(records: list[dict[str, object]]) -> None:
                 same = total = 0
                 for case_id in {str(record["case_id"]) for record in subset}:
                     picks = {
-                        str(record["variant"]): record.get("triage")
+                        str(record["variant"]): _level(record)
                         for record in subset
                         if record["case_id"] == case_id
                     }
@@ -105,7 +113,7 @@ def _main_bar(records: list[dict[str, object]]) -> None:
 def _confusion(records: list[dict[str, object]], gold: dict[str, str]) -> None:
     matrix = np.zeros((len(TRIAGE_ORDER), len(TRIAGE_ORDER)))
     for record in records:
-        predicted = record.get("triage")
+        predicted = _level(record)
         truth = gold.get(str(record["case_id"]))
         if isinstance(predicted, str) and truth in TRIAGE_ORDER and predicted in TRIAGE_ORDER:
             matrix[TRIAGE_ORDER.index(truth)][TRIAGE_ORDER.index(predicted)] += 1
@@ -130,8 +138,8 @@ def _case_card(records: list[dict[str, object]], gold: dict[str, str]) -> None:
     """案例卡：同一例的不同说法给出什么结论。答辩时最有说服力的一张。"""
     by_case: dict[str, dict[str, str]] = defaultdict(dict)
     for record in records:
-        predicted = record.get("triage")
-        if isinstance(predicted, str):
+        predicted = _level(record)
+        if predicted:
             by_case[str(record["case_id"])][str(record["variant"])] = predicted
     moved = {
         case: picks
@@ -178,7 +186,7 @@ def _downgrade(records: list[dict[str, object]], arms: tuple[str, ...] = ("A0", 
         for record in subset:
             if record["variant"] == "V1":
                 continue
-            current = record.get("triage")
+            current = _level(record)
             base = baseline.get((record["case_id"], record["model"], record["repetition"]))
             if not isinstance(current, str) or not isinstance(base, str) or current == base:
                 continue

@@ -207,3 +207,24 @@ def test_free_form_names_must_resolve_to_the_controlled_vocabulary() -> None:
     assert record.kept_conditions == ["上呼吸道感染"]
     assert record.free_names == ["某种罕见综合征"]
     assert record.deleted_count == 1
+
+
+def test_chinese_level_value_is_rejected_not_stored() -> None:
+    """模型偶尔直接写「门诊」；结构闸门要求档位在枚举内，非法值等于没有档位。"""
+    draft = json.loads(json.dumps(DRAFT))
+    draft["triage"] = "门诊"
+
+    record = _run(arm_name="A0", text="流鼻涕三天了", draft=draft)
+
+    assert record.status == "enum_invalid"
+    assert record.triage is None
+
+
+def test_department_outside_the_controlled_list_is_rejected() -> None:
+    draft = json.loads(json.dumps(DRAFT))
+    draft["department"] = "中医科"
+
+    record = _run(arm_name="A0", text="流鼻涕三天了", draft=draft)
+
+    assert record.status == "enum_invalid"
+    assert record.department is None

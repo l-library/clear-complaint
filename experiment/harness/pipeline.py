@@ -19,6 +19,10 @@ from harness.retrieval import Index
 
 # 澄清先行的判据：主诉里有没有交代病程。没有病程就无从判断急缓，必须追问。
 # 判据保持可解释、可复现，不假装能测出「部位、性质」这些更细的字段。
+# 结构闸门：分诊档与科室必须在受控枚举内。模型偶尔会直接写「门诊」这种中文值，
+# 原样存进记录会让下游统计把非法值当成合法档位。
+TRIAGE_LEVELS = ("emergency", "clinic", "self_observe")
+
 DURATION_CUES = (
     "天",
     "周",
@@ -185,6 +189,15 @@ def run_unit(
     department = payload.get("department")
     record.triage = triage if isinstance(triage, str) else None
     record.department = department if isinstance(department, str) else None
+    if record.triage is not None and record.triage not in TRIAGE_LEVELS:
+        record.status = "enum_invalid"
+        record.triage = None
+        record.department = None
+        return record
+    if record.department is not None and record.department not in departments:
+        record.status = "enum_invalid"
+        record.department = None
+        return record
     record.template_ok = _template_ok(payload)
     if current.output_side_instruction and not record.template_ok:
         record.status = "template_invalid"
