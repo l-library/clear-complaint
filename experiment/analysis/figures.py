@@ -148,20 +148,22 @@ def _case_card(records: list[dict[str, object]], gold: dict[str, str]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("run", type=Path)
-    parser.add_argument("--cases", default="pilot")
+    parser.add_argument("runs", type=Path, nargs="+")
     args = parser.parse_args()
 
     _setup_font()
     OUT.mkdir(parents=True, exist_ok=True)
-    records = metrics.load(args.run)
-    cases_path = Path(__file__).resolve().parent.parent / "cases" / f"{args.cases}.jsonl"
-    gold = {
-        row["case_id"]: row["gold"]["triage"]
-        for row in (
-            json.loads(line) for line in cases_path.read_text(encoding="utf-8").splitlines() if line
-        )
-    }
+    records = [record for path in args.runs for record in metrics.load(path)]
+    cases_dir = Path(__file__).resolve().parent.parent / "cases"
+    gold: dict[str, str] = {}
+    for name in ("pilot.jsonl", "drafts.jsonl"):
+        path = cases_dir / name
+        if not path.exists():
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                row = json.loads(line)
+                gold[row["case_id"]] = row["gold"]["triage"]
 
     _main_bar(records)
     _variant_heat(records)

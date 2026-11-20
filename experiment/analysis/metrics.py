@@ -186,9 +186,8 @@ def gold_red_flags(cases_path: Path) -> dict[str, list[str]]:
     }
 
 
-def main(path: Path, cases_path: Path | None = None) -> int:
-    records = load(path)
-    rows = summary(records, gold_red_flags(cases_path) if cases_path else None)
+def summarise(records: list[dict[str, object]], gold: dict[str, list[str]] | None = None) -> int:
+    rows = summary(records, gold)
 
     print(
         "| 臂 | 模型 | 片段数 | 有效率 | 档位一致率 | 科室一致率 | 澄清率 | 引用通过 | 红旗漏检 |"
@@ -215,6 +214,12 @@ def main(path: Path, cases_path: Path | None = None) -> int:
 if __name__ == "__main__":
     import sys
 
-    run_path = Path(sys.argv[1])
-    default_cases = Path(__file__).resolve().parent.parent / "cases" / "pilot.jsonl"
-    raise SystemExit(main(run_path, default_cases))
+    # 支持一次给多个 run 文件：4 例与 16 例是分两批跑的，分析时合并
+    paths = [Path(item) for item in sys.argv[1:]] or [Path("runs/pilot-8a7591d1.jsonl")]
+    records = [record for path in paths for record in load(path)]
+    cases_dir = Path(__file__).resolve().parent.parent / "cases"
+    gold: dict[str, list[str]] = {}
+    for name in ("pilot.jsonl", "drafts.jsonl"):
+        if (cases_dir / name).exists():
+            gold.update(gold_red_flags(cases_dir / name))
+    raise SystemExit(summarise(records, gold))
