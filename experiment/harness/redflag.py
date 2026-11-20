@@ -17,6 +17,13 @@ from harness.normalize import normalize
 
 CORPUS = Path(__file__).resolve().parent.parent / "corpus"
 
+# 否定与假设的作用域。子串匹配不认语境，「没有胸痛」和「会不会脱水」都会被当成
+# 征象命中——实测 132 次命中里 18 次是这么来的。规则要安全，就得先看懂否定。
+NEGATION_WINDOW = 6
+NEGATIONS = ("没有", "没", "无", "否认", "排除", "会不会", "是否", "未见", "未")
+# 「不」单独用太危险（不适、不停），只在明确的否定搭配里算
+NEGATION_PAIRS = ("不伴",)
+
 
 @dataclass(frozen=True)
 class Hit:
@@ -42,12 +49,29 @@ def rules() -> tuple[Hit, ...]:
     )
 
 
+def _negated(folded: str, trigger: str) -> bool:
+    """触发词的所有出现位置都被否定/假设语境盖住时，算作未命中。"""
+    start = 0
+    while True:
+        index = folded.find(trigger, start)
+        if index < 0:
+            return True  # 一次都没出现，自然不算命中
+        window = folded[max(0, index - NEGATION_WINDOW) : index]
+        if not any(mark in window for mark in NEGATIONS + NEGATION_PAIRS):
+            return False  # 有一处未被否定，就算命中
+        start = index + 1
+
+
 def detect(text: str) -> list[Hit]:
-    """返回命中的红旗。text 传原文，函数内部做归一化。"""
+    """返回命中的红旗。text 传原文，函数内部做归一化。
+
+    命中还要求触发词不在否定或假设的作用域里：「没有胸痛」不是胸痛，
+    「会不会脱水」不是脱水。
+    """
     folded = normalize(text)
     hits = []
     for rule in rules():
-        if any(trigger and trigger in folded for trigger in rule.triggers):
+        if any(trigger and not _negated(folded, trigger) for trigger in rule.triggers):
             hits.append(rule)
     return hits
 

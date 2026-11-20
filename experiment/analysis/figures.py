@@ -23,6 +23,18 @@ from harness.cases import VARIANTS  # noqa: E402
 OUT = Path(__file__).resolve().parent / "figures"
 TRIAGE_ORDER = ("emergency", "clinic", "self_observe")
 TRIAGE_LABEL = {"emergency": "急诊", "clinic": "门诊", "self_observe": "自我观察"}
+RANK = {"self_observe": 0, "clinic": 1, "emergency": 2}
+# 降级方向：按危险程度排序，最危险的（急诊判成自我观察）放最上面
+DOWNGRADE_KINDS = (
+    ("emergency", "self_observe"),
+    ("emergency", "clinic"),
+    ("clinic", "self_observe"),
+)
+KIND_LABEL = {
+    ("emergency", "self_observe"): "急诊 → 自我观察",
+    ("emergency", "clinic"): "急诊 → 门诊",
+    ("clinic", "self_observe"): "门诊 → 自我观察",
+}
 
 
 def _setup_font() -> None:
@@ -146,6 +158,47 @@ def _case_card(records: list[dict[str, object]], gold: dict[str, str]) -> None:
     plt.close(fig)
 
 
+def _downgrade(records: list[dict[str, object]], arms: tuple[str, ...] = ("A0", "Aall")) -> None:
+    """降级图：删减细节之后，判轻的是不是随机分布的。
+
+    一致率只说「不一样」，不说「往哪个方向不一样」。把降级方向按病例摊开，
+    才能看出信息缺失带来的是系统性的低判，而不是随机抖动。
+    """
+    fig, axes = plt.subplots(1, len(arms), figsize=(5.2 * len(arms), 4.2), squeeze=False)
+    for axis, arm_name in zip(axes[0], arms, strict=True):
+        subset = [record for record in records if record["arm"] == arm_name]
+        baseline = {
+            (record["case_id"], record["model"], record["repetition"]): record["triage"]
+            for record in subset
+            if record["variant"] == "V1"
+        }
+        counts: dict[str, dict[tuple[str, str], int]] = defaultdict(
+            lambda: {kind: 0 for kind in DOWNGRADE_KINDS}
+        )
+        for record in subset:
+            if record["variant"] == "V1":
+                continue
+            current = record.get("triage")
+            base = baseline.get((record["case_id"], record["model"], record["repetition"]))
+            if not isinstance(current, str) or not isinstance(base, str) or current == base:
+                continue
+            if RANK[current] < RANK[base]:
+                counts[str(record["case_id"])][(base, current)] += 1
+
+        cases = sorted(counts) or ["—"]
+        left = np.zeros(len(cases))
+        for kind in DOWNGRADE_KINDS:
+            values = np.asarray([counts[case][kind] for case in cases], dtype=float)
+            axis.barh(cases, values, left=left, label=KIND_LABEL[kind])
+            left += values
+        axis.set_title(f"{arm_name}：判轻的方向（相对 V1）")
+        axis.set_xlabel("降级次数")
+        axis.legend(fontsize=8, loc="lower right")
+    fig.tight_layout()
+    fig.savefig(OUT / "downgrade.png", dpi=150)
+    plt.close(fig)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("runs", type=Path, nargs="+")
@@ -169,6 +222,7 @@ def main() -> int:
     _variant_heat(records)
     _confusion(records, gold)
     _case_card(records, gold)
+    _downgrade(records)
     print(f"[info] 状态分布 {dict(Counter(str(r['status']) for r in records))}")
     print(f"[info] 图写入 {OUT}")
     return 0

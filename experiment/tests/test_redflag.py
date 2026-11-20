@@ -39,3 +39,25 @@ def test_colloquial_chest_pain_phrasings_all_hit() -> None:
     """患者不会说「胸痛」：胸口疼、心口疼、胸口痛都要命中同一条规则。"""
     for text in ("胸口疼，出汗二十分钟了", "心口疼得厉害", "胸口痛，闷得慌"):
         assert "RF12" in {hit.rule_id for hit in redflag.detect(text)}, text
+
+
+def test_negated_symptom_does_not_fire() -> None:
+    """「没有胸痛」不是胸痛。子串匹配不认语境，规则要安全就得先看懂否定。"""
+    assert redflag.detect("没有胸痛，也没晕，心慌两小时") == []
+    assert redflag.detect("否认药物过敏，流鼻涕三天") == []
+
+
+def test_hypothetical_does_not_fire() -> None:
+    """「会不会脱水」是担心，不是征象。"""
+    assert redflag.detect("我很担心，腹泻三天，会不会脱水") == []
+
+
+def test_negation_after_the_trigger_still_fires() -> None:
+    """否定词在触发词之后时，毛病是真的，照常命中。"""
+    assert {hit.rule_id for hit in redflag.detect("胸口疼，没有缓解，出汗")} >= {"RF12"}
+
+
+def test_one_unnegated_mention_is_enough() -> None:
+    """同一句里既有否定也有肯定时，肯定那处要算命中。"""
+    hits = redflag.detect("一开始没有胸痛，今天开始胸口疼，出汗")
+    assert {hit.rule_id for hit in hits} >= {"RF12"}
