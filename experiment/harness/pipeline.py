@@ -33,6 +33,10 @@ DURATION_CUES = (
     "刚才",
     "最近",
     "半天",
+    "一下午",
+    "一上午",
+    "一整晚",
+    "一整天",
 )
 
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", flags=re.MULTILINE)

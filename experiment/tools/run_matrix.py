@@ -88,6 +88,10 @@ def main() -> int:
                 "reps": args.reps,
                 "corpus": index.meta.get("chunks_sha256"),
                 "vocab": hashlib.sha256((HERE / "corpus" / "vocab.json").read_bytes()).hexdigest(),
+                # 红旗规则改了，短路判定就变了；不算进指纹会让重跑把旧格子当成已完成
+                "rules": hashlib.sha256(
+                    (HERE / "corpus" / "red_flags.json").read_bytes()
+                ).hexdigest(),
                 "max_tokens": llm.MAX_TOKENS,
                 "tag": args.tag,
             },
