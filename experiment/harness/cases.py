@@ -15,8 +15,11 @@ CASES = Path(__file__).resolve().parent.parent / "cases"
 
 VARIANTS = ("V1", "V2", "V3", "V4", "V5")
 # 记忆变体：主诉取 V1，另加一段既往记录。三个条件用来分开「有记忆」与「记忆对错」
-HISTORY_VARIANTS = ("V6a", "V6b", "V6c")
+HISTORY_VARIANTS = ("V6a", "V6b", "V6c", "V6b2", "V6b3")
 HISTORY_KEYS = ("a", "b", "c")
+# b2 拆开「安抚」（无复发暗示），b3 是「医嘱型」直接给分诊建议
+HISTORY_OPTIONAL_KEYS = ("b2", "b3")
+VITALS_VARIANTS = ("V7a", "V7b")
 TRIAGE_LEVELS = ("emergency", "clinic", "self_observe")
 AGE_BANDS = ("<14", "14-64", ">=65")
 
@@ -45,6 +48,7 @@ class Case:
     gold: Gold
     variants: dict[str, str]
     history: dict[str, str]
+    vitals: dict[str, str]
 
 
 def _departments() -> set[str]:
@@ -69,6 +73,7 @@ def load(path: Path | None = None) -> list[Case]:
             gold=gold,
             variants=dict(row["variants"]),
             history={key: str(value) for key, value in (row.get("history") or {}).items()},
+            vitals={key: str(value) for key, value in (row.get("vitals") or {}).items()},
         )
         _validate(case, departments)
         cases.append(case)
@@ -81,11 +86,16 @@ def load(path: Path | None = None) -> list[Case]:
 def _validate(case: Case, departments: set[str]) -> None:
     if set(case.variants) != set(VARIANTS):
         raise ValueError(f"{case.case_id}: 变体不齐，需要 {VARIANTS}")
-    if case.history and set(case.history) != set(HISTORY_KEYS):
-        raise ValueError(f"{case.case_id}: 既往史需要三段 {HISTORY_KEYS}")
-    lengths = {key: len(value) for key, value in case.history.items()}
-    if lengths and max(lengths.values()) - min(lengths.values()) > 12:
-        raise ValueError(f"{case.case_id}: 三段既往史长度差超过 12 字 {lengths}")
+    if case.history:
+        required = set(HISTORY_KEYS) | (
+            set(HISTORY_OPTIONAL_KEYS) if len(case.history) > 3 else set()
+        )
+        if not required.issubset(set(case.history)):
+            raise ValueError(f"{case.case_id}: 既往史缺段 {required - set(case.history)}")
+    # 长度平衡只在 abc 三段之间要求：b2/b3 是后加的拆解变体，与 a 等长即可
+    core = {key: len(case.history[key]) for key in HISTORY_KEYS if key in case.history}
+    if core and max(core.values()) - min(core.values()) > 12:
+        raise ValueError(f"{case.case_id}: 三段既往史长度差超过 12 字 {core}")
     if case.gold.triage not in TRIAGE_LEVELS:
         raise ValueError(f"{case.case_id}: 金标准档位非法 {case.gold.triage}")
     if case.gold.department not in departments:

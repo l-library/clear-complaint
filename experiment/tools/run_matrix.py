@@ -70,8 +70,8 @@ class Throttle:
 
 
 def _complaint(case: case_lib.Case, variant: str) -> str:
-    """记忆变体只换既往史，主诉一律用 V1。"""
-    if variant in case_lib.HISTORY_VARIANTS:
+    """记忆与体征变体只换附加区块，主诉一律用 V1。"""
+    if variant in case_lib.HISTORY_VARIANTS or variant in case_lib.VITALS_VARIANTS:
         return case.variants["V1"]
     return case.variants[variant]
 
@@ -86,6 +86,12 @@ def _portrait(case: case_lib.Case) -> str:
 def _history(case: case_lib.Case, variant: str) -> str | None:
     if variant in case_lib.HISTORY_VARIANTS:
         return case.history.get(variant[-1])
+    return None
+
+
+def _vitals(case: case_lib.Case, variant: str) -> str | None:
+    if variant in case_lib.VITALS_VARIANTS:
+        return case.vitals.get(variant[-1])
     return None
 
 
@@ -204,9 +210,7 @@ def main() -> int:
             arm_name=arm_name,
             model=model,
             repetition=repetition,
-            raw_text=case.variants["V1"]
-            if variant in case_lib.HISTORY_VARIANTS
-            else case.variants[variant],
+            raw_text=_complaint(case, variant),
             history=(
                 case.history.get(variant[-1]) if variant in case_lib.HISTORY_VARIANTS else None
             ),
