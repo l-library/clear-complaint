@@ -18,7 +18,7 @@
 | `arms/` | 四个实验臂的提示词与开关快照 | 是 |
 | `runs/` | 每次调用的原始响应与参数，只追加 | 是 |
 | `analysis/` | 指标、bootstrap、`figures/` | 是（图） |
-| `handoff/` | 约束规格书与冻结样本，阶段二验收用 | 是 |
+| `handoff/` | `constraints.md` 五条约束的规格与实测效应；`frozen_sample.jsonl` 100 条验收样本 | 是 |
 
 语料、病例与 run 记录一律入仓库。证据不在仓库里就等于没有，所以不用 `.gitignore` 挡体积。
 
@@ -44,6 +44,7 @@ uv run python -m tools.embed               # 冻结向量，需 EMBED_API_KEY �
 uv run python -m tools.build_kb            # 导出可上传平台知识库的 56 份文档 + 标签表
 uv run python -m tools.embed --check       # 校验向量与 chunks 是否一致
 uv run python -m tools.probe_ingested      # 病种覆盖表，离线
+uv run python -m tools.build_handoff       # 从实测记录生成阶段二验收用的冻结样本
 uv run python -m tools.list_candidates     # 新的下载清单，只碰站点搜索接口
 ```
 

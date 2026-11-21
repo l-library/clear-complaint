@@ -226,14 +226,14 @@ uv run python -m tools.build_kb      # 产出 corpus/kb/ 与 corpus/kb/kb_manife
 - `corpus/`、`cases/`、`runs/`：语料、病例、原始记录，全部入仓库。宁可体积大也不 gitignore——证据不在仓库里就等于没有。
 - `analysis/figures/`：四张图
 - [stage1-result.md](stage1-result.md)：实验结果、效应量、区间与已知限制
-- `handoff/constraints.md`：每条约束的触发判据、输入输出变换、可测断言、反例
-- `handoff/frozen_sample.jsonl`：20 例 × 5 变体的期望档位与科室
+- `handoff/constraints.md`：每条约束的触发判据、输入输出变换、可测断言、反例，附实测效应（含测出来是零的几条）
+- `handoff/frozen_sample.jsonl`：100 条，20 例 × 5 变体的期望档位与科室，由 `tools/build_handoff.py` 从实测结果取众数生成
 
 ## 阶段二验收
 
 阶段二在平台上重建同一组约束后，用 `handoff/frozen_sample.jsonl` 对照：档位一致率不低于 T1、科室一致率不低于 T2，未达视为平台侧实现不复现阶段一结论，需返工。
 
-T1、T2 由阶段一的实测天花板反推，先定 90% 与 85% 作占位。反过来定会自伤——阶段一自己只到 78%，验收线却写 90%，等于给自己下绊子。
+T1、T2 由阶段一的实测天花板反推，现定为档位 0.85、科室 0.75。阶段一全约束臂在四臂配对子集上的自身一致率是 0.913 与 0.827，理想条件下也只有这个量级，验收线定在 0.90 就是给自己下绊子。
 
 ## 已知限制
 
