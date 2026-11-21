@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -49,6 +50,23 @@ def _done(path: Path) -> set[str]:
             continue
         done.add(str(row["unit_id"]))
     return done
+
+
+class Throttle:
+    """按令牌桶限制单元启动速率，防止瞬时并发打满网关的吞吐配额。"""
+
+    def __init__(self, workers: int, min_interval: float = 1.2) -> None:
+        self._interval = min_interval / max(1, workers)
+        self._lock = threading.Lock()
+        self._next = 0.0
+
+    def wait(self) -> None:
+        with self._lock:
+            now = time.monotonic()
+            delay = self._next - now
+            self._next = max(now, self._next) + self._interval
+        if delay > 0:
+            time.sleep(delay)
 
 
 def _complaint(case: case_lib.Case, variant: str) -> str:
@@ -174,8 +192,12 @@ def main() -> int:
     def call(model: str, messages: list[dict[str, str]]) -> llm.Completion:
         return llm.chat(model, messages, temperature=args.temperature)
 
+    # 网关按吞吐限流：短探针测不出来，连续全量才撞。单元间强制间隔，宁可慢也不重跑
+    throttle = Throttle(args.workers)
+
     def work(unit: tuple[case_lib.Case, str, str, str, int]) -> str:
         case, variant, arm_name, model, repetition = unit
+        throttle.wait()
         record = pipeline.run_unit(
             case_id=case.case_id,
             variant=variant,

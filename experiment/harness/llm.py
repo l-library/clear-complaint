@@ -108,10 +108,10 @@ def chat(
             )
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", "ignore")[:200]
-            # 429 是网关限流：全量 8 路并发曾烧掉 737 格。降并发加退避重试。
+            # 429 是网关的吞吐限流（短探针不撞、连续全量才撞），指数退避重试
             if exc.code == 429 or exc.code >= 500:
                 last = exc
-                time.sleep(3 * (attempt + 1))
+                time.sleep(min(60, 10 * (2**attempt)))
                 continue
             if exc.code < 500:
                 raise LLMError(f"{model} 调用失败 {exc.code}: {detail}", exc.code) from exc
