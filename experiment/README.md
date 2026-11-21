@@ -11,6 +11,7 @@
 | 目录 | 内容 | 入仓库 |
 |---|---|---|
 | `tools/` | 抓取与构建脚本 | 是 |
+| `corpus/kb/` | 导出给平台知识库的文件集与 `kb_manifest.csv` | 是 |
 | `corpus/` | 指南片段、冻结向量、候选词表、科室表、红旗清单 | 是 |
 | `cases/` | 病例、五个变体、金标准、签核记录 | 是 |
 | `harness/` | 归一化、红旗、检索、引用与模板校验、模型客户端 | 是 |
@@ -40,6 +41,7 @@ uv run python -m tools.fetch_govcn         # 从政策文件库补齐传染病�
 uv run python -m tools.chunk               # 切片，产出 corpus/chunks.jsonl
 uv run python -m tools.controlled          # 三张受控表，每条都要能在语料里指到原文
 uv run python -m tools.embed               # 冻结向量，需 EMBED_API_KEY 或 MAAS_API_KEY
+uv run python -m tools.build_kb            # 导出可上传平台知识库的 56 份文档 + 标签表
 uv run python -m tools.embed --check       # 校验向量与 chunks 是否一致
 uv run python -m tools.probe_ingested      # 病种覆盖表，离线
 uv run python -m tools.list_candidates     # 新的下载清单，只碰站点搜索接口

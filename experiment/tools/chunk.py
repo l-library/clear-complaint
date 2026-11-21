@@ -95,6 +95,47 @@ def _split_long(text: str) -> list[str]:
     return pieces
 
 
+def _fallback_chunks(title: str, slug: str, text: str, start: int) -> list[Chunk]:
+    """没有条款编号的文件按句切。
+
+    OCR 出来的文本与「正文直接排在网页里」的通知都没有「一、」「（一）」这类编号，
+    按编号切会整份丢成零片段——语料里少一份文件，覆盖率就少一截。
+    """
+    pieces: list[Chunk] = []
+    buffer = ""
+    for sentence in _SENTENCE_END.split(_clean(text)):
+        if not sentence:
+            continue
+        if len(buffer) + len(sentence) > MAX_CHARS:
+            body = _clean(buffer)
+            if len(body) >= MIN_CHARS:
+                pieces.append(
+                    Chunk(
+                        chunk_id=f"{slug}#fb{start + len(pieces):03d}",
+                        source=slug,
+                        title=title,
+                        heading="",
+                        role="clinical",
+                        text=body,
+                    )
+                )
+            buffer = ""
+        buffer += sentence
+    body = _clean(buffer)
+    if len(body) >= MIN_CHARS:
+        pieces.append(
+            Chunk(
+                chunk_id=f"{slug}#fb{start + len(pieces):03d}",
+                source=slug,
+                title=title,
+                heading="",
+                role="clinical",
+                text=body,
+            )
+        )
+    return pieces
+
+
 def _chunks_for(title: str, slug: str, text: str) -> list[Chunk]:
     chunks: list[Chunk] = []
     pending = ""
@@ -130,6 +171,8 @@ def _chunks_for(title: str, slug: str, text: str) -> list[Chunk]:
             if len(pending) >= MIN_CHARS:
                 flush()
     flush()
+    if not chunks:
+        return _fallback_chunks(title, slug, text, 0)
     return chunks
 
 
@@ -141,7 +184,8 @@ def _kept_sources() -> dict[str, str]:
         if not path.exists():
             continue
         for entry in json.loads(path.read_text(encoding="utf-8")):
-            if entry["status"] != "ok":
+            # ocr 也是可用的正文：扫描件补了文字层就该进语料，否则白 OCR 一遍
+            if entry["status"] not in {"ok", "ocr"}:
                 continue
             _, keep, _ = roles.classify(entry["title"], entry["slug"])
             if keep:

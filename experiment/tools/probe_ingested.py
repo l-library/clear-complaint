@@ -13,24 +13,13 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from tools import fetch, roles
+from tools import domains, fetch, roles
 
 HERE = Path(__file__).resolve().parent.parent
 CORPUS = HERE / "corpus"
 TEXT = CORPUS / "text"
 
-# 病种域。这批语料覆盖的是病种而不是症状，域的名字跟着文件走。
-DOMAINS: dict[str, tuple[str, ...]] = {
-    "发热待查": ("发热", "体温", "高热", "热程", "稽留热"),
-    "呼吸道症状": ("咳嗽", "流涕", "咽痛", "鼻塞", "咳痰", "气促", "呼吸困难"),
-    "腹泻呕吐": ("腹泻", "呕吐", "水样便", "稀便", "脱水", "补液"),
-    "皮疹": ("皮疹", "斑丘疹", "疱疹", "出血点", "结膜充血"),
-    "胸痛心悸": ("胸痛", "胸闷", "心悸", "胸骨后", "压榨性", "心绞痛"),
-    "头晕与意识改变": ("头晕", "头痛", "意识障碍", "意识改变", "抽搐", "惊厥"),
-    "乏力与水肿": ("乏力", "水肿", "贫血", "活动耐量", "气短"),
-    "伤口与动物致伤": ("咬伤", "抓伤", "伤口", "暴露后", "狂犬", "破伤风"),
-    "慢病随访": ("血压", "血糖", "血脂", "随访", "分级诊疗", "转诊"),
-}
+DOMAINS = domains.DOMAINS
 
 # 可作引用源的章节
 CITABLE_SECTIONS = (
