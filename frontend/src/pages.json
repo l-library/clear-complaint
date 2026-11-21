@@ -1,16 +1,29 @@
 {
-	"pages": [ //pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
-		{
-			"path": "pages/index/index",
-			"style": {
-				"navigationBarTitleText": "清诉"
-			}
-		}
-	],
-	"globalStyle": {
-		"navigationBarTextStyle": "black",
-		"navigationBarTitleText": "清诉",
-		"navigationBarBackgroundColor": "#F8F8F8",
-		"backgroundColor": "#F8F8F8"
-	}
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "清诉 · 把不适慢慢说清楚"
+      }
+    },
+    {
+      "path": "pages/chat/index",
+      "style": { "navigationStyle": "custom", "navigationBarTitleText": "清诉 · AI 对话" }
+    },
+    {
+      "path": "pages/health-records/index",
+      "style": { "navigationStyle": "custom", "navigationBarTitleText": "清诉 · 健康档案" }
+    },
+    {
+      "path": "pages/health-plans/index",
+      "style": { "navigationStyle": "custom", "navigationBarTitleText": "清诉 · 健康计划" }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "清诉",
+    "navigationBarBackgroundColor": "#f5f9ff",
+    "backgroundColor": "#f5f9ff"
+  }
 }
