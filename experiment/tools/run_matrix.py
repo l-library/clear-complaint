@@ -40,9 +40,14 @@ def _done(path: Path) -> set[str]:
         if not line.strip():
             continue
         try:
-            done.add(str(json.loads(line)["unit_id"]))
-        except json.JSONDecodeError, KeyError:
+            row = json.loads(line)
+        except json.JSONDecodeError:
             print("[warn] 跳过一行不完整的记录（上次中断留下的）")
+            continue
+        # api_error 是可重试的失败（限流、网关抖动），不算完成；其余状态都算
+        if row.get("status") == "api_error":
+            continue
+        done.add(str(row["unit_id"]))
     return done
 
 
