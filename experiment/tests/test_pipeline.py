@@ -243,3 +243,11 @@ def test_record_stores_the_temperature_actually_used() -> None:
     record = _run(arm_name="A0")
 
     assert record.params["temperature"] == llm.TEMPERATURE
+
+
+def test_unit_id_distinguishes_pool_and_temperature() -> None:
+    """换池子也是换实验条件，id 必须区分，否则续跑会把新条件当成已完成。"""
+    base = pipeline.unit_id("c01", "V1", "A0", "glm-5.2", 1)
+
+    assert pipeline.unit_id("c01", "V1", "A0", "glm-5.2", 1, pool="empty") == base + "-poolempty"
+    assert pipeline.unit_id("c01", "V1", "A0", "glm-5.2", 1, 0.0) == base + "-t0"

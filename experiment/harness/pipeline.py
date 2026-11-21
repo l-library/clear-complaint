@@ -12,10 +12,18 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from typing import Protocol
 
 from harness import arms, citation, llm, redflag, vocab
 from harness.normalize import normalize, split_attribution
-from harness.retrieval import Index
+from harness.retrieval import Passage
+
+
+class Searcher(Protocol):
+    """检索器只需要一个 search。真实索引与固定池都满足它。"""
+
+    def search(self, query: str, k: int = 5) -> list[Passage]: ...
+
 
 # 澄清先行的判据：主诉里有没有交代病程。没有病程就无从判断急缓，必须追问。
 # 判据保持可解释、可复现，不假装能测出「部位、性质」这些更细的字段。
@@ -55,12 +63,15 @@ def unit_id(
     model: str,
     repetition: int,
     temperature: float = llm.TEMPERATURE,
+    pool: str = "normal",
 ) -> str:
     """单元标识。温度偏离默认值时带后缀，否则同一格在不同温度下会撞成一条记录。"""
     base = f"{case_id}-{variant}-{arm_name}-{model}-r{repetition}"
-    if abs(temperature - llm.TEMPERATURE) < 1e-9:
-        return base
-    return f"{base}-t{temperature:g}"
+    if abs(temperature - llm.TEMPERATURE) > 1e-9:
+        base = f"{base}-t{temperature:g}"
+    if pool != "normal":
+        base = f"{base}-pool{pool}"
+    return base
 
 
 @dataclass
@@ -92,7 +103,7 @@ class Record:
     latency_ms: int = 0
     arm_hash: str = ""
     corpus_sha: str = ""
-    params: dict[str, float | int] = field(default_factory=dict)
+    params: dict[str, float | int | str] = field(default_factory=dict)
 
 
 def parse_draft(text: str) -> dict[str, object] | None:
@@ -130,13 +141,14 @@ def run_unit(
     raw_text: str,
     known_terms: set[str],
     departments: list[str],
-    index: Index,
+    index: Searcher,
     call: LLMCall = llm.chat,
     temperature: float = llm.TEMPERATURE,
+    pool: str = "normal",
 ) -> Record:
     current = arms.arm(arm_name)
     record = Record(
-        unit_id=unit_id(case_id, variant, arm_name, model, repetition, temperature),
+        unit_id=unit_id(case_id, variant, arm_name, model, repetition, temperature, pool),
         case_id=case_id,
         variant=variant,
         arm=arm_name,
@@ -150,6 +162,7 @@ def run_unit(
             "temperature": temperature,
             "top_p": llm.TOP_P,
             "max_tokens": llm.MAX_TOKENS,
+            "pool": pool,
         },
     )
 

@@ -19,6 +19,8 @@ from pathlib import Path
 from harness import cases as case_lib
 from harness import llm, pipeline, retrieval, vocab
 from harness.arms import ARMS, arm
+from harness.retrieval import Index
+from tools import domains
 
 HERE = Path(__file__).resolve().parent.parent
 RUNS = HERE / "runs"
@@ -53,6 +55,12 @@ def main() -> int:
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--variants", default=",".join(case_lib.VARIANTS))
     parser.add_argument("--temperature", type=float, default=llm.TEMPERATURE)
+    parser.add_argument(
+        "--pool",
+        default="normal",
+        choices=("normal", "irrelevant", "empty"),
+        help="normal 走真实检索；irrelevant 换成无关片段；empty 不给任何依据",
+    )
     parser.add_argument("--tag", default="")
     args = parser.parse_args()
 
@@ -95,6 +103,7 @@ def main() -> int:
                 ).hexdigest(),
                 "max_tokens": llm.MAX_TOKENS,
                 "temperature": args.temperature,
+                "pool": args.pool,
                 "tag": args.tag,
             },
             sort_keys=True,
@@ -122,6 +131,19 @@ def main() -> int:
     class Frozen(RuntimeError):
         """资源被冻结时继续跑只会把剩余格子烧成错误记录，直接中止。"""
 
+    def pool_for(case: case_lib.Case) -> Index | retrieval.FixedPool:
+        if args.pool == "normal":
+            return index
+        if args.pool == "empty":
+            return retrieval.FixedPool([])
+        others = [
+            passage
+            for passage in index.passages()
+            if domains.hits(passage.text) and case.domain not in domains.hits(passage.text)
+        ]
+        start = sum(ord(ch) for ch in case.case_id) % max(1, len(others) - 5)
+        return retrieval.FixedPool(others[start : start + 5])
+
     def call(model: str, messages: list[dict[str, str]]) -> llm.Completion:
         return llm.chat(model, messages, temperature=args.temperature)
 
@@ -136,9 +158,10 @@ def main() -> int:
             raw_text=case.variants[variant],
             known_terms=known,
             departments=departments,
-            index=index,
+            index=pool_for(case),
             call=call,
             temperature=args.temperature,
+            pool=args.pool,
         )
         if record.status == "api_error" and "frozen" in record.draft_raw.lower():
             raise Frozen(f"{model}: {record.draft_raw[:120]}")

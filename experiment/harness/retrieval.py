@@ -39,6 +39,20 @@ class Passage:
     score: float
 
 
+class FixedPool:
+    """固定检索池：用于隔离「知识库给了什么」这一层。
+
+    阶段一的检索器与阶段二平台知识库不是同一实现，这层差异值多少，只能靠
+    把池子换成无关内容或空池来量。
+    """
+
+    def __init__(self, passages: list[Passage]) -> None:
+        self._passages = passages
+
+    def search(self, query: str, k: int = TOPK) -> list[Passage]:
+        return self._passages[:k]
+
+
 class Index:
     """冻结向量与片段元数据。构造后不再读网络，只有 query 需要向量化。"""
 
@@ -60,6 +74,19 @@ class Index:
     @property
     def model(self) -> str:
         return str(self.meta["model"])
+
+    def passages(self) -> list[Passage]:
+        """整池摊开。固定池实验要从中抽无关片段，所以需要一个整池视图。"""
+        return [
+            Passage(
+                chunk_id=cid,
+                title=self._rows[cid]["title"],
+                heading=self._rows[cid]["heading"],
+                text=self._rows[cid]["text"],
+                score=0.0,
+            )
+            for cid in self._ids
+        ]
 
     def _lexical(self, query: str) -> list[int]:
         if self._bm25 is None:
