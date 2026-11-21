@@ -52,6 +52,7 @@ def main() -> int:
     parser.add_argument("--models", type=int, default=2, help="取 BENCH 里前几个模型")
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--variants", default=",".join(case_lib.VARIANTS))
+    parser.add_argument("--temperature", type=float, default=llm.TEMPERATURE)
     parser.add_argument("--tag", default="")
     args = parser.parse_args()
 
@@ -93,6 +94,7 @@ def main() -> int:
                     (HERE / "corpus" / "red_flags.json").read_bytes()
                 ).hexdigest(),
                 "max_tokens": llm.MAX_TOKENS,
+                "temperature": args.temperature,
                 "tag": args.tag,
             },
             sort_keys=True,
@@ -110,11 +112,18 @@ def main() -> int:
         for model in models
         for repetition in range(1, args.reps + 1)
     ]
-    pending = [u for u in units if _unit_id(*u) not in finished]
+    pending = [
+        u
+        for u in units
+        if pipeline.unit_id(u[0].case_id, u[1], u[2], u[3], u[4], args.temperature) not in finished
+    ]
     print(f"[info] 总计 {len(units)} 格，已完成 {len(finished)}，待跑 {len(pending)} → {out.name}")
 
     class Frozen(RuntimeError):
         """资源被冻结时继续跑只会把剩余格子烧成错误记录，直接中止。"""
+
+    def call(model: str, messages: list[dict[str, str]]) -> llm.Completion:
+        return llm.chat(model, messages, temperature=args.temperature)
 
     def work(unit: tuple[case_lib.Case, str, str, str, int]) -> str:
         case, variant, arm_name, model, repetition = unit
@@ -128,6 +137,8 @@ def main() -> int:
             known_terms=known,
             departments=departments,
             index=index,
+            call=call,
+            temperature=args.temperature,
         )
         if record.status == "api_error" and "frozen" in record.draft_raw.lower():
             raise Frozen(f"{model}: {record.draft_raw[:120]}")
@@ -151,10 +162,6 @@ def main() -> int:
         tokens += int(row.get("prompt_tokens") or 0) + int(row.get("completion_tokens") or 0)
     print(f"[info] 完成，写入 {out}；已记录 {tokens} tokens")
     return 0
-
-
-def _unit_id(case: case_lib.Case, variant: str, arm_name: str, model: str, repetition: int) -> str:
-    return f"{case.case_id}-{variant}-{arm_name}-{model}-r{repetition}"
 
 
 if __name__ == "__main__":

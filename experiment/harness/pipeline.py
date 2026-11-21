@@ -48,6 +48,21 @@ _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", flags=re.MULTILINE)
 LLMCall = Callable[[str, list[dict[str, str]]], llm.Completion]
 
 
+def unit_id(
+    case_id: str,
+    variant: str,
+    arm_name: str,
+    model: str,
+    repetition: int,
+    temperature: float = llm.TEMPERATURE,
+) -> str:
+    """单元标识。温度偏离默认值时带后缀，否则同一格在不同温度下会撞成一条记录。"""
+    base = f"{case_id}-{variant}-{arm_name}-{model}-r{repetition}"
+    if abs(temperature - llm.TEMPERATURE) < 1e-9:
+        return base
+    return f"{base}-t{temperature:g}"
+
+
 @dataclass
 class Record:
     unit_id: str
@@ -117,10 +132,11 @@ def run_unit(
     departments: list[str],
     index: Index,
     call: LLMCall = llm.chat,
+    temperature: float = llm.TEMPERATURE,
 ) -> Record:
     current = arms.arm(arm_name)
     record = Record(
-        unit_id=f"{case_id}-{variant}-{arm_name}-{model}-r{repetition}",
+        unit_id=unit_id(case_id, variant, arm_name, model, repetition, temperature),
         case_id=case_id,
         variant=variant,
         arm=arm_name,
@@ -131,7 +147,7 @@ def run_unit(
         arm_hash=current.snapshot(),
         corpus_sha=str(getattr(index, "meta", {}).get("chunks_sha256", ""))[:16],
         params={
-            "temperature": llm.TEMPERATURE,
+            "temperature": temperature,
             "top_p": llm.TOP_P,
             "max_tokens": llm.MAX_TOKENS,
         },

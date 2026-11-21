@@ -228,3 +228,18 @@ def test_department_outside_the_controlled_list_is_rejected() -> None:
 
     assert record.status == "enum_invalid"
     assert record.department is None
+
+
+def test_unit_id_carries_the_temperature_only_when_it_differs() -> None:
+    """温度偏离默认值时必须换 id，否则同一格在两个温度下会撞成一条记录。"""
+    base = pipeline.unit_id("c01", "V1", "A0", "glm-5.2", 1)
+
+    assert base == "c01-V1-A0-glm-5.2-r1"
+    assert pipeline.unit_id("c01", "V1", "A0", "glm-5.2", 1, 0.0) == base + "-t0"
+    assert pipeline.unit_id("c01", "V1", "A0", "glm-5.2", 1, 0.7) == base
+
+
+def test_record_stores_the_temperature_actually_used() -> None:
+    record = _run(arm_name="A0")
+
+    assert record.params["temperature"] == llm.TEMPERATURE
