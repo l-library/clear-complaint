@@ -53,6 +53,13 @@ def _complaint(case: case_lib.Case, variant: str) -> str:
     return case.variants[variant]
 
 
+def _portrait(case: case_lib.Case) -> str:
+    """画像进提示词：年龄、性别、基础病、过敏史。四个臂一致。"""
+    p = case.portrait
+    age = {"<14": "14 岁以下", "14-64": "14 至 64 岁", ">=65": "65 岁及以上"}[p.age_band]
+    return f"{age} · {p.sex} · {p.history} · {p.allergy}"
+
+
 def _history(case: case_lib.Case, variant: str) -> str | None:
     if variant in case_lib.HISTORY_VARIANTS:
         return case.history.get(variant[-1])

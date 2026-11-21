@@ -147,6 +147,7 @@ def run_unit(
     temperature: float = llm.TEMPERATURE,
     pool: str = "normal",
     history: str | None = None,
+    portrait: str | None = None,
 ) -> Record:
     current = arms.arm(arm_name)
     record = Record(
@@ -196,6 +197,7 @@ def run_unit(
         complaint,
         vocab.names(),
         history,
+        portrait,
     )
 
     started = time.monotonic()

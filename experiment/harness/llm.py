@@ -19,11 +19,15 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
-DEFAULT_BASE_URL = "https://api.modelarts-maas.com/openai/v1"
+# 同济校园网关（OneAPI 部署）。实测单次 4 秒左右，比 MaaS 快一个量级。
+# 注意：网关标称与背后部署可能不一致（DeepSeek-V4.1-Flash 自称 ChatGPT），
+# 材料里按网关标称写。
+DEFAULT_BASE_URL = "https://agi.tongji.edu.cn/v1"
 # 异构配对的判据是「不同厂商 + 能在可接受预算内出合法 JSON」。
-# 第二席曾因资源冻结临时换成盘古（403 ModelArts.81006），充值解冻后换回 glm-5.2：
-# 盘古中位 43 秒、最长 316 秒，做 1200 格会把全量拖到九小时以上。
-BENCH = ("deepseek-v4.1-flash-1017", "glm-5.2")
+# 华为 MaaS 上的旧配对是 deepseek-v4.1-flash-1017 与 glm-5.2，因账号资源
+# 冻结（403 ModelArts.81006）与费用问题切换到同济网关。GLM 的 Flash 版
+# 不是推理吞预算型，4096 内工作正常。
+BENCH = ("DeepSeek-V4.1-Flash", "GLM-5.3-Flash")
 
 TEMPERATURE = 0.7
 TOP_P = 1.0
@@ -48,10 +52,15 @@ class Completion:
 
 
 def _config() -> tuple[str, str]:
-    base = os.environ.get("MAAS_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
-    key = os.environ.get("MAAS_API_KEY") or os.environ.get("HUAWEI_MAAS_API_KEY", "")
+    base = os.environ.get("LLM_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
+    key = (
+        os.environ.get("LLM_API_KEY")
+        or os.environ.get("TJU_API_KEY")
+        or os.environ.get("MAAS_API_KEY")
+        or os.environ.get("HUAWEI_MAAS_API_KEY", "")
+    )
     if not key:
-        raise LLMError("缺少 MAAS_API_KEY 或 HUAWEI_MAAS_API_KEY")
+        raise LLMError("缺少 LLM_API_KEY / TJU_API_KEY / HUAWEI_MAAS_API_KEY")
     return base, key
 
 

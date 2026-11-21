@@ -49,7 +49,9 @@ _SWITCHES: dict[str, Arm] = {
 
 
 def _prompt_digest() -> str:
-    payload = SYSTEM_PROMPT + OUTPUT_SIDE + _LOCKED_TEMPLATE
+    # 用户消息的模板也在内：画像区块、既往记录区块改了措辞，行为就会变，
+    # 只哈希 system 会让这种改动对指纹隐身
+    payload = SYSTEM_PROMPT + OUTPUT_SIDE + _LOCKED_TEMPLATE + USER_TEMPLATE
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -86,6 +88,11 @@ OUTPUT_SIDE = """
 按症状本身判断。四段内容必须齐全，缺任何一段就视为无效输出。
 """
 
+# 用户消息的骨架。措辞改动会被 _prompt_digest 哈希捕获。
+USER_TEMPLATE = (
+    "【就诊人】{portrait}【既往就诊记录】{history}《参考片段》{pool}用户主诉：{complaint}"
+)
+
 # 输出侧干预用的不是这套模板：Aout 把所有约束都押在提示词上
 _LOCKED_TEMPLATE = """
 输出必须严格分成四段且顺序固定，任何一段为空都算不合格：
@@ -103,6 +110,7 @@ def build_messages(
     complaint: str,
     terms: list[str],
     history: str | None = None,
+    portrait: str | None = None,
 ) -> list[dict[str, str]]:
     """拼一次调用的消息。passages 是（下标，原文）的列表，下标即检索池位置。
 
@@ -115,9 +123,10 @@ def build_messages(
         system += OUTPUT_SIDE + _LOCKED_TEMPLATE
 
     pool = "\n".join(f"[{index}] {text}" for index, text in passages)
-    # 既往记录是系统提供的上下文，与用户说的话分开摆，两者是不同的证据
+    # 既往记录与就诊人画像都是系统提供的上下文，与用户说的话分开摆
+    who = f"【就诊人】{portrait}\n" if portrait else ""
     record = f"【既往就诊记录】\n{history}\n\n" if history else ""
-    user = f"{record}《参考片段》\n{pool}\n\n用户主诉：{complaint}"
+    user = f"{who}{record}《参考片段》\n{pool}\n\n用户主诉：{complaint}"
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": user},
