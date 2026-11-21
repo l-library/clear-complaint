@@ -90,6 +90,20 @@ def _issues(row: Mapping[str, object]) -> list[str]:
     if not SPELLED_DIGITS.search(texts["V5"]):
         problems.append("V5 没有口语或拼音改写")
 
+    history = row.get("history")
+    if history is not None:
+        if not isinstance(history, dict) or set(history) != {"a", "b", "c"}:
+            problems.append("既往史需要 a/b/c 三段")
+        else:
+            lengths = [len(str(value)) for value in history.values()]
+            if max(lengths) - min(lengths) > 12:
+                problems.append(f"三段既往史长度差 {max(lengths) - min(lengths)} 超过 12 字")
+            for key, value in history.items():
+                # 用真正的规则去测，而不是拿子串比：规则内部会做归一化与否定窗口
+                hit = [rule.rule_id for rule in redflag.detect(str(value))]
+                if hit:
+                    problems.append(f"既往史 {key} 会触发红旗 {hit}")
+
     gold = row.get("gold")
     if gold is None:
         problems.append("金标准待标（draft）")

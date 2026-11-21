@@ -14,6 +14,9 @@ CORPUS = Path(__file__).resolve().parent.parent / "corpus"
 CASES = Path(__file__).resolve().parent.parent / "cases"
 
 VARIANTS = ("V1", "V2", "V3", "V4", "V5")
+# 记忆变体：主诉取 V1，另加一段既往记录。三个条件用来分开「有记忆」与「记忆对错」
+HISTORY_VARIANTS = ("V6a", "V6b", "V6c")
+HISTORY_KEYS = ("a", "b", "c")
 TRIAGE_LEVELS = ("emergency", "clinic", "self_observe")
 AGE_BANDS = ("<14", "14-64", ">=65")
 
@@ -41,6 +44,7 @@ class Case:
     portrait: Portrait
     gold: Gold
     variants: dict[str, str]
+    history: dict[str, str]
 
 
 def _departments() -> set[str]:
@@ -64,6 +68,7 @@ def load(path: Path | None = None) -> list[Case]:
             portrait=portrait,
             gold=gold,
             variants=dict(row["variants"]),
+            history={key: str(value) for key, value in (row.get("history") or {}).items()},
         )
         _validate(case, departments)
         cases.append(case)
@@ -76,6 +81,11 @@ def load(path: Path | None = None) -> list[Case]:
 def _validate(case: Case, departments: set[str]) -> None:
     if set(case.variants) != set(VARIANTS):
         raise ValueError(f"{case.case_id}: 变体不齐，需要 {VARIANTS}")
+    if case.history and set(case.history) != set(HISTORY_KEYS):
+        raise ValueError(f"{case.case_id}: 既往史需要三段 {HISTORY_KEYS}")
+    lengths = {key: len(value) for key, value in case.history.items()}
+    if lengths and max(lengths.values()) - min(lengths.values()) > 12:
+        raise ValueError(f"{case.case_id}: 三段既往史长度差超过 12 字 {lengths}")
     if case.gold.triage not in TRIAGE_LEVELS:
         raise ValueError(f"{case.case_id}: 金标准档位非法 {case.gold.triage}")
     if case.gold.department not in departments:

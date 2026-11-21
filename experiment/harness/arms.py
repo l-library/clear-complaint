@@ -102,6 +102,7 @@ def build_messages(
     passages: list[tuple[int, str]],
     complaint: str,
     terms: list[str],
+    history: str | None = None,
 ) -> list[dict[str, str]]:
     """拼一次调用的消息。passages 是（下标，原文）的列表，下标即检索池位置。
 
@@ -114,7 +115,9 @@ def build_messages(
         system += OUTPUT_SIDE + _LOCKED_TEMPLATE
 
     pool = "\n".join(f"[{index}] {text}" for index, text in passages)
-    user = f"《参考片段》\n{pool}\n\n用户主诉：{complaint}"
+    # 既往记录是系统提供的上下文，与用户说的话分开摆，两者是不同的证据
+    record = f"【既往就诊记录】\n{history}\n\n" if history else ""
+    user = f"{record}《参考片段》\n{pool}\n\n用户主诉：{complaint}"
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": user},

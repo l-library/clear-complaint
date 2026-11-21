@@ -46,6 +46,19 @@ def _done(path: Path) -> set[str]:
     return done
 
 
+def _complaint(case: case_lib.Case, variant: str) -> str:
+    """记忆变体只换既往史，主诉一律用 V1。"""
+    if variant in case_lib.HISTORY_VARIANTS:
+        return case.variants["V1"]
+    return case.variants[variant]
+
+
+def _history(case: case_lib.Case, variant: str) -> str | None:
+    if variant in case_lib.HISTORY_VARIANTS:
+        return case.history.get(variant[-1])
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cases", default="pilot")
@@ -53,7 +66,9 @@ def main() -> int:
     parser.add_argument("--reps", type=int, default=3)
     parser.add_argument("--models", type=int, default=2, help="取 BENCH 里前几个模型")
     parser.add_argument("--workers", type=int, default=4)
-    parser.add_argument("--variants", default=",".join(case_lib.VARIANTS))
+    parser.add_argument(
+        "--variants", default=",".join(case_lib.VARIANTS + case_lib.HISTORY_VARIANTS)
+    )
     parser.add_argument("--temperature", type=float, default=llm.TEMPERATURE)
     parser.add_argument(
         "--pool",
@@ -155,7 +170,12 @@ def main() -> int:
             arm_name=arm_name,
             model=model,
             repetition=repetition,
-            raw_text=case.variants[variant],
+            raw_text=case.variants["V1"]
+            if variant in case_lib.HISTORY_VARIANTS
+            else case.variants[variant],
+            history=(
+                case.history.get(variant[-1]) if variant in case_lib.HISTORY_VARIANTS else None
+            ),
             known_terms=known,
             departments=departments,
             index=pool_for(case),

@@ -57,3 +57,26 @@ def test_missing_variant_is_reported_once() -> None:
     del row["variants"]["V5"]
 
     assert check_cases._issues(row) == ["缺变体 ['V5']"]
+
+
+def test_history_must_be_three_balanced_segments_without_red_flags() -> None:
+    """既往史是独立变量：三段齐全、长度接近、不能自带红旗触发词。"""
+    row = json.loads(json.dumps(BASE))
+    row["history"] = {
+        "a": "两年前因类似症状就诊，诊断为过敏",
+        "b": "上次没管自己好了，休息两天",
+        "c": "一年前因牙痛就诊，拔牙一颗",
+    }
+
+    assert not [p for p in check_cases._issues(row) if "既往史" in p]
+
+
+def test_history_with_a_red_flag_word_is_flagged() -> None:
+    row = json.loads(json.dumps(BASE))
+    row["history"] = {
+        "a": "两年前因胸痛不缓解住院，诊断冠心病",
+        "b": "上次没管自己好了，休息两天",
+        "c": "一年前因牙痛就诊，拔牙一颗",
+    }
+
+    assert any("会触发红旗" in p for p in check_cases._issues(row))

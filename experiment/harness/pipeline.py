@@ -83,6 +83,7 @@ class Record:
     model: str
     repetition: int
     raw_text: str
+    history: str = ""
     normalized_text: str = ""
     attribution: str | None = None
     red_flags: list[str] = field(default_factory=list)
@@ -145,6 +146,7 @@ def run_unit(
     call: LLMCall = llm.chat,
     temperature: float = llm.TEMPERATURE,
     pool: str = "normal",
+    history: str | None = None,
 ) -> Record:
     current = arms.arm(arm_name)
     record = Record(
@@ -155,6 +157,7 @@ def run_unit(
         model=model,
         repetition=repetition,
         raw_text=raw_text,
+        history=history or "",
         normalized_text=normalize(raw_text),
         arm_hash=current.snapshot(),
         corpus_sha=str(getattr(index, "meta", {}).get("chunks_sha256", ""))[:16],
@@ -192,6 +195,7 @@ def run_unit(
         [(position, passage.text) for position, passage in enumerate(passages)],
         complaint,
         vocab.names(),
+        history,
     )
 
     started = time.monotonic()
