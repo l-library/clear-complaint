@@ -71,7 +71,7 @@ def chat(
     max_tokens: int = MAX_TOKENS,
     temperature: float = TEMPERATURE,
     top_p: float = TOP_P,
-    retries: int = 2,
+    retries: int = 6,
 ) -> Completion:
     """一次调用。4xx 直接抛出（参数或权限问题重试无意义），5xx 与超时重试。"""
     base, key = _config()
@@ -108,6 +108,11 @@ def chat(
             )
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", "ignore")[:200]
+            # 429 是网关限流：全量 8 路并发曾烧掉 737 格。降并发加退避重试。
+            if exc.code == 429 or exc.code >= 500:
+                last = exc
+                time.sleep(3 * (attempt + 1))
+                continue
             if exc.code < 500:
                 raise LLMError(f"{model} 调用失败 {exc.code}: {detail}", exc.code) from exc
             last = exc
