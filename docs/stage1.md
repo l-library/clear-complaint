@@ -221,7 +221,7 @@ uv run python -m tools.build_kb      # 产出 corpus/kb/ 与 corpus/kb/kb_manife
 
 - `corpus/`、`cases/`、`runs/`：语料、病例、原始记录，全部入仓库。宁可体积大也不 gitignore——证据不在仓库里就等于没有。
 - `analysis/figures/`：四张图
-- 本文档补上「实验结果」一节：效应量、区间、已知限制
+- [stage1-result.md](stage1-result.md)：实验结果、效应量、区间与已知限制
 - `handoff/constraints.md`：每条约束的触发判据、输入输出变换、可测断言、反例
 - `handoff/frozen_sample.jsonl`：20 例 × 5 变体的期望档位与科室
 

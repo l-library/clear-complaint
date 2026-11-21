@@ -102,13 +102,17 @@ def consistency(records: list[dict[str, object]], field: str) -> float:
     return matched / total if total else float("nan")
 
 
-def per_case_delta(records: list[dict[str, object]], arm: str, field: str) -> dict[str, float]:
+def per_case_delta(
+    records: list[dict[str, object]], arm: str, field: str, model: str | None = None
+) -> dict[str, float]:
     """逐例的一致率，bootstrap 的重采样单位就是它。"""
     pick = _triage if field == "triage" else _department
     case_values: dict[str, list[float]] = defaultdict(list)
     groups: dict[tuple[str, str], dict[str, str | None]] = defaultdict(dict)
     for record in records:
         if record["arm"] != arm:
+            continue
+        if model is not None and str(record["model"]) != model:
             continue
         key = (str(record["model"]), str(record["case_id"]))
         groups[key][str(record["variant"])] = pick(record)
@@ -217,7 +221,7 @@ def summarise(records: list[dict[str, object]], gold: dict[str, list[str]] | Non
         )
 
     for row in rows:
-        values = per_case_delta(records, row.arm, "triage")
+        values = per_case_delta(records, row.arm, "triage", row.model)
         low, high = cluster_bootstrap(values)
         print(
             f"[ci] {row.arm} {row.model} 档位一致率 95% CI "
