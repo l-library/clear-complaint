@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 from app.account import models as account_models  # noqa: F401
+from app.archive import models as archive_models  # noqa: F401
 from app.core.config import get_settings
 from app.db.base import Base
 from app.episode import models as episode_models  # noqa: F401
