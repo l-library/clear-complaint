@@ -74,7 +74,7 @@
 | `docker compose down` / `down -v` | 停止，后者连数据一起删 |
 | `cd backend && uv sync` | 安装依赖并准备虚拟环境 |
 | `cd backend && uv run uvicorn app.main:app --reload` | 启动后端，8000，接口前缀 `/api` |
-| `cd backend && uv run pytest` | 后端测试 |
+| `cd backend && uv run pytest` | 后端测试（需要 docker 里的 Postgres） |
 | `cd backend && uv run alembic upgrade head` | 迁移到最新 |
 | `cd backend && uv run alembic revision -m "说明"` | 新建迁移 |
 | `cd frontend && pnpm install` | 安装前端依赖 |
@@ -167,7 +167,7 @@ Closes #34.
   `code == 0` 表示成功，非 0 是业务错误码，由 `app/common/codes.py` 的 `ErrorCode` 定义；前端只判断 `code`，不解析 `message`。HTTP 状态码仍然表达语义：400 参数错误、401 未认证、403 无权限、404 不存在、500 服务端异常。
 - 分页统一 `data = { records, total, page, size }`（列表接口尚未落地，落地时按这个形状）。
 - 时间统一 `Asia/Shanghai`，接口返回 `yyyy-MM-dd HH:mm:ss` 字符串。
-- 健康检查是 `/api/health`，**不查库**，这样 CI 不需要 Postgres。
+- 健康检查是 `/api/health`，**不查库**。测试套件需要 Postgres：pytest 每个会话重建 `clear_complaint_test` 并跑 Alembic 迁移，本地先 `docker compose up -d`，CI 的 backend job 带 `services: postgres`。
 - 业务错误抛 `BizException(ErrorCode.XXX, "可选的自定义消息")`，全局处理器会转成统一响应体。未匹配的路径与不支持的方法已经映射到对应错误码，不要让它们掉进兜底的 500 分支。
 - 数据库访问用 SQLAlchemy 2.x async 加 asyncpg。会话通过 `Depends(get_session)` 注入，不要在路由里自己 `SessionLocal()`。模型继承 `app/db/base.py` 的 `Base`。
 - **禁止代码建表**：不调用 `Base.metadata.create_all`，不写 `CREATE TABLE`。表结构只由 Alembic 迁移创建。
@@ -199,7 +199,7 @@ Closes #34.
 | 归一化、红旗短路、引用核验 | 未写 | 这三块是后端主干，等语料和评测集有形状再动手 |
 | 登录鉴权 | 未做 | 所有接口当前放行，JWT 方案未落地 |
 | 小程序 appid | 未申请 | 真机调试前必须补 |
-| 测试数据库 | 未接 | 现有测试不连库，需要库的用例要同时给 CI 加 `services: postgres` |
+| 测试数据库 | 已接 | `tests/conftest.py` 每个会话重建 `clear_complaint_test`（环境变量 `TEST_DATABASE_URL`，默认 `localhost:5432`）并执行 `alembic upgrade head`；CI 的 backend job 带 `services: postgres` |
 | Redis | 未接入 | 先不加依赖 |
 | 对象存储（图片上传） | 未选型 | 等真有上传需求 |
 | 接口文档与前端类型生成 | 未接入 | FastAPI 自带 OpenAPI，`openapi-typescript` 是候选方案 |

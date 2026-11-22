@@ -74,7 +74,7 @@ ClearComplaint is a split frontend and backend application. `frontend/` is one u
 | `docker compose down` / `down -v` | Stop; the second form also deletes data |
 | `cd backend && uv sync` | Install dependencies and prepare the venv |
 | `cd backend && uv run uvicorn app.main:app --reload` | Start the backend on 8000, routes under `/api` |
-| `cd backend && uv run pytest` | Backend tests |
+| `cd backend && uv run pytest` | Backend tests (needs the dockerized Postgres) |
 | `cd backend && uv run alembic upgrade head` | Migrate to the latest revision |
 | `cd backend && uv run alembic revision -m "message"` | Create a migration |
 | `cd frontend && pnpm install` | Install frontend dependencies |
@@ -167,7 +167,7 @@ Closes #34.
   `code == 0` means success; any other value is a business error defined in `ErrorCode` at `app/common/codes.py`. The frontend checks `code` only and does not parse `message`. HTTP status codes still carry meaning: 400 invalid parameters, 401 unauthenticated, 403 forbidden, 404 not found, 500 server error.
 - Pagination uses `data = { records, total, page, size }`. No list endpoint exists yet; use this shape when one lands.
 - Time is `Asia/Shanghai`, and responses carry `yyyy-MM-dd HH:mm:ss` strings.
-- The health check is `/api/health` and it **does not touch the database**, so CI needs no Postgres.
+- The health check is `/api/health` and it **does not touch the database**. The test suite does need Postgres: pytest rebuilds `clear_complaint_test` and runs the Alembic migrations every session, so run `docker compose up -d` locally, and the CI backend job carries a `services: postgres` entry.
 - Raise `BizException(ErrorCode.XXX, "optional message")` for business errors; the global handlers turn it into the envelope. Unmatched paths and unsupported methods are already mapped to the right error code, so they never fall into the catch-all 500.
 - Database access uses SQLAlchemy 2.x async with asyncpg. Inject sessions with `Depends(get_session)`; never call `SessionLocal()` inside a route. Models inherit from `Base` in `app/db/base.py`.
 - **Never create tables from code**: no `Base.metadata.create_all`, no hand-written `CREATE TABLE`. Only Alembic migrations create schema.
@@ -199,7 +199,7 @@ The table lists what we deliberately put off. Doing any of it means changing thi
 | Normalization, red flag short-circuit, citation gate | Not written | These are the backend trunk; they wait for the corpus and eval set to take shape |
 | Authentication | Not done | All endpoints are open, the JWT approach is not settled |
 | Mini program appid | Not applied | Required before testing on a real device |
-| Test database | Not wired | Current tests use no database; a test that needs one also needs `services: postgres` in CI |
+| Test database | Wired | `tests/conftest.py` rebuilds `clear_complaint_test` every session (env `TEST_DATABASE_URL`, default `localhost:5432`) and runs `alembic upgrade head`; the CI backend job carries `services: postgres` |
 | Redis | Not added | Do not add the dependency yet |
 | Object storage (image upload) | Not chosen | Wait until there is a real upload need |
 | API docs and frontend type generation | Not wired | FastAPI ships OpenAPI; `openapi-typescript` is the candidate |
