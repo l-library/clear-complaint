@@ -194,10 +194,10 @@ The table lists what we deliberately put off. Doing any of it means changing thi
 
 | Item | Status | Notes |
 | --- | --- | --- |
-| Business tables (`episode`, `condition`, `citation`, ...) | Not created | Field design is in `docs/PLAN.md`; write the `V1__init` migration once it settles |
+| Account tables (`user`/`consent`/`refresh_token`) | Created (V1) | `episode` and the other business tables land per domain, field design per docs/api.md |
 | AgentArts client | Not wired | Only `/ping` and `/health` exist, no platform call code yet |
 | Normalization, red flag short-circuit, citation gate | Not written | These are the backend trunk; they wait for the corpus and eval set to take shape |
-| Authentication | Not done | All endpoints are open, the JWT approach is not settled |
+| Authentication | Done (account domain) | HS256 access token 2h, refresh token 30d with rotation (replay is 1005); register/login/refresh/logout live, other domains adopt `get_current_user` as needed |
 | Mini program appid | Not applied | Required before testing on a real device |
 | Test database | Wired | `tests/conftest.py` rebuilds `clear_complaint_test` every session (env `TEST_DATABASE_URL`, default `localhost:5432`) and runs `alembic upgrade head`; the CI backend job carries `services: postgres` |
 | Redis | Not added | Do not add the dependency yet |

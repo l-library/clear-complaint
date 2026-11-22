@@ -8,8 +8,11 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
+from app.account import models  # noqa: F401
 from app.core.config import get_settings
 from app.db.base import Base
+
+# 业务模型必须 import 进来，autogenerate 才看得到；新建域包后加到这里
 
 config = context.config
 if config.config_file_name is not None:

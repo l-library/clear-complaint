@@ -2,7 +2,9 @@
 
 from fastapi import APIRouter
 
+from app.account import router as account_router
 from app.common import web
 
 api_router = APIRouter()
 api_router.include_router(web.router)
+api_router.include_router(account_router.router)
