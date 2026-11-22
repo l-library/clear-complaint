@@ -194,7 +194,7 @@ Closes #34.
 
 | 事项 | 现状 | 备注 |
 | --- | --- | --- |
-| 账号三表（`user`/`consent`/`refresh_token`） | 已建（V1） | `episode` 等业务表按域逐个补迁移，字段设计依 docs/api.md |
+| 账号四表（`user`/`consent`/`refresh_token`/`profile`） | 已建（V1、V2） | `episode` 等业务表按域逐个补迁移，字段设计依 docs/api.md |
 | AgentArts 客户端 | 未接入 | 目前只有 `/ping` 与 `/health`，没有任何平台调用代码 |
 | 归一化、红旗短路、引用核验 | 未写 | 这三块是后端主干，等语料和评测集有形状再动手 |
 | 登录鉴权 | 已做（账号域） | HS256 访问令牌 2h、刷新令牌 30 天轮换（重放 1005）；注册/登录/刷新/登出已上线，其他域按需接 `get_current_user` |
