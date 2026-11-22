@@ -94,3 +94,17 @@ class PrivacyRecord(BaseModel):
     consented_version: str | None
     consented_at: str | None
     outdated: bool
+
+
+class ExportData(BaseModel):
+    url: str
+    expires_at: str
+    size_bytes: int
+
+
+class DeleteConfirm(BaseModel):
+    confirm: str
+
+
+class ClearData(BaseModel):
+    cleared: dict[str, int]

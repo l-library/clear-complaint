@@ -7,6 +7,7 @@
 
 import hashlib
 import hmac
+import logging
 import re
 import secrets
 from datetime import date, datetime, timedelta
@@ -14,10 +15,11 @@ from typing import Annotated, Any
 
 import jwt
 from fastapi import Depends, Header
-from sqlalchemy import select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.account.export import purge_export_tokens
 from app.account.models import Consent, Profile, RefreshToken, User
 from app.account.schema import (
     AuthData,
@@ -31,11 +33,16 @@ from app.account.schema import (
 from app.account.schema import (
     Profile as ProfileOut,
 )
+from app.archive.models import Medication, Vital
 from app.common.clock import format_shanghai, now_shanghai
 from app.common.codes import ErrorCode
 from app.common.errors import BizException
 from app.core.config import get_settings
 from app.db.session import get_session
+from app.episode.models import Episode
+from app.reminder import models as reminder_models
+
+logger = logging.getLogger(__name__)
 
 _PHONE = re.compile(r"\d{11}")
 _PBKDF2_ITERATIONS = 260_000
@@ -234,7 +241,60 @@ async def get_current_user(
     return user
 
 
+async def clear_user_data(session: AsyncSession, user: User, confirm: str) -> dict[str, int]:
+    """清空个人数据，账号保留（api.md 11.3）。删除一律硬删、不可恢复。"""
+    if confirm != "删除":
+        raise BizException(ErrorCode.DELETE_CONFIRM_MISMATCH)
+
+    counts = {
+        "episodes": await session.scalar(
+            select(func.count()).select_from(Episode).where(Episode.user_id == user.id)
+        ),
+        "vitals": await session.scalar(
+            select(func.count()).select_from(Vital).where(Vital.user_id == user.id)
+        ),
+        "medications": await session.scalar(
+            select(func.count()).select_from(Medication).where(Medication.user_id == user.id)
+        ),
+        "reminders": await session.scalar(
+            select(func.count())
+            .select_from(reminder_models.Reminder)
+            .where(reminder_models.Reminder.user_id == user.id)
+        ),
+    }
+    # 顺序：先删挂靠行（外键级联会带走答案、幂等键、随访记录与计划），
+    # 再删独立行，最后档案。硬删，不做软删
+    await session.execute(
+        delete(reminder_models.Reminder).where(reminder_models.Reminder.user_id == user.id)
+    )
+    await session.execute(delete(Episode).where(Episode.user_id == user.id))
+    await session.execute(delete(Vital).where(Vital.user_id == user.id))
+    await session.execute(delete(Medication).where(Medication.user_id == user.id))
+    await session.execute(delete(Profile).where(Profile.user_id == user.id))
+    await session.commit()
+    # 导出令牌与文件一并清掉，不留可下载的个人数据
+    await purge_export_tokens(session, user.id)
+    return {key: int(value or 0) for key, value in counts.items()}
+
+
+async def delete_account(session: AsyncSession, user: User, confirm: str) -> None:
+    """清空全部数据并注销账号（api.md 11.4）。刷新令牌随行删除即全部失效。"""
+    if confirm != "删除":
+        raise BizException(ErrorCode.DELETE_CONFIRM_MISMATCH)
+
+    await clear_user_data(session, user, "删除")
+    await session.execute(delete(Consent).where(Consent.user_id == user.id))
+    await session.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
+    await session.delete(user)
+    await session.commit()
+    # 操作日志只留时间与用户号哈希，不留任何内容
+    user_hash = hashlib.sha256(str(user.id).encode()).hexdigest()[:16]
+    logger.info("账号注销 user_hash=%s at=%s", user_hash, format_shanghai(now_shanghai()))
+
+
 __all__ = [
+    "clear_user_data",
+    "delete_account",
     "get_current_user",
     "get_profile",
     "hash_password",

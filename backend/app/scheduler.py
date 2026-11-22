@@ -11,6 +11,7 @@
 """
 
 import asyncio
+import contextlib
 import logging
 from datetime import date, datetime, timedelta
 from datetime import time as clock_time
@@ -18,6 +19,7 @@ from datetime import time as clock_time
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.account.export import purge_expired_exports
 from app.archive.models import Medication, MedicationPlan
 from app.common.clock import now_shanghai
 from app.db.session import SessionLocal
@@ -141,6 +143,9 @@ async def run_tick(session: AsyncSession) -> None:
     await expire_short_term_medications(session, now.date())
     await mark_overdue_missed(session, now)
     await purge_expired_episodes(session, now)
+    # 导出目录未配置时跳过该作业，不影响其他清理
+    with contextlib.suppress(Exception):
+        await purge_expired_exports(session, now)
 
 
 async def run_forever(interval: int = TICK_SECONDS) -> None:

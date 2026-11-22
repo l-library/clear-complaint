@@ -6,9 +6,10 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.account import schema, service
+from app.account import export, schema, service
 from app.account.models import User
 from app.common.api import ApiResponse, ok
 from app.core.config import get_settings
@@ -45,6 +46,39 @@ async def logout(
     payload: schema.RefreshRequest, session: SessionDep, user: CurrentUser
 ) -> ApiResponse[None]:
     await service.logout(session, user, payload.refresh_token)
+    return ok(None)
+
+
+@router.get("/export")
+async def build_export(session: SessionDep, user: CurrentUser) -> ApiResponse[schema.ExportData]:
+    return ok(schema.ExportData(**await export.build_export(session, user)))
+
+
+@router.get("/export/{token}")
+async def download_export(token: str, session: SessionDep) -> FileResponse:
+    # 不鉴权：令牌本身不可猜测且一次性（api.md 11.2）
+    path = await export.fetch_export(session, token)
+    return FileResponse(
+        path,
+        media_type="application/zip",
+        filename="clear-complaint-export.zip",
+        headers={"Content-Disposition": 'attachment; filename="clear-complaint-export.zip"'},
+    )
+
+
+@router.delete("/data")
+async def clear_data(
+    payload: schema.DeleteConfirm, session: SessionDep, user: CurrentUser
+) -> ApiResponse[schema.ClearData]:
+    cleared = await service.clear_user_data(session, user, payload.confirm)
+    return ok(schema.ClearData(cleared=cleared))
+
+
+@router.delete("/account")
+async def delete_account(
+    payload: schema.DeleteConfirm, session: SessionDep, user: CurrentUser
+) -> ApiResponse[None]:
+    await service.delete_account(session, user, payload.confirm)
     return ok(None)
 
 
