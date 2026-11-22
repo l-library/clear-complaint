@@ -10,12 +10,13 @@ dependencies = [
     "sqlalchemy[asyncio]",
     "asyncpg",
     "alembic",
+    "httpx>=0.28.1",
+    "pyjwt>=2.15.1",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
-    "httpx",
     "ruff",
     "mypy",
 ]
