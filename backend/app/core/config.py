@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     agentarts_triage_api_key: str = ""
     agentarts_invoke_mode: str = "published"
 
+    # 进程内定时任务（用药提醒生成、超时、过期、未保存清理）。
+    # 默认关闭：测试与 CI 不受后台写库影响；生产与本地演示经 .env 打开
+    scheduler_enabled: bool = False
+
     # 隐私政策版本与链接：GET /api/meta/privacy 返回，注册时校验 consent_version
     privacy_version: str = "2026-11-01"
     privacy_policy_url: str = "https://example.com/privacy"

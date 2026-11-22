@@ -27,6 +27,11 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+filterwarnings = [
+    # 测试里每个操作一个事件循环，asyncpg 连接的取消协程在 GC 时已无处执行；
+    # 生产是单循环进程，不会走到这条路径
+    "ignore:coroutine 'Connection._cancel' was never awaited:RuntimeWarning",
+]
 
 [tool.ruff]
 line-length = 100

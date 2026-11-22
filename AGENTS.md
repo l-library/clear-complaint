@@ -195,7 +195,7 @@ The table lists what we deliberately put off. Doing any of it means changing thi
 | Item | Status | Notes |
 | --- | --- | --- |
 | Account tables (V1, V2), episode tables (V3: `episode`/`episode_answer`/`idempotency_key`/`reminder`), archive tables (V4: `vital`/`medication`/`medication_plan`) | Created | Tables land per domain, field design per docs/api.md |
-| AgentArts client | Wired (client layer) | `app/agent/client.py`: the 16.2 transport (SSE terminal detection, protocol and request_id checks, 4001-4003 mapping) has been smoke-tested against real Profile-Intake and Triage runs; episode-flow wiring (M4) and the gates are not done |
+| AgentArts client | Wired | `app/agent/client.py` transport plus the `app/episode/platform.py` and `app/reminder/platform.py` seams; episode generation, clarification, fallback (M4) and the followup supplement (M6c) run against the real platform, all three workflow versions match the DSL baselines. The QA and constraints endpoints are not done |
 | Normalization, red flag short-circuit, citation gate, vocab and department tables | Written (M5) | `app/agent/normalize.py, redflag.py, citation.py, vocab.py, departments.py` plus `data/` (three frozen tables, version 1), copied from experiment and maintained independently; test assertions come from handoff/constraints.md. Known edge: the 6-char negation window swallows a second true hit immediately after a negation |
 | Authentication | Done (account domain) | HS256 access token 2h, refresh token 30d with rotation (replay is 1005); register/login/refresh/logout live, other domains adopt `get_current_user` as needed |
 | Mini program appid | Not applied | Required before testing on a real device |
