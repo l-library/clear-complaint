@@ -124,7 +124,7 @@ def _documents() -> list[Document]:
         if not line.strip():
             continue
         row = json.loads(line)
-        if row["role"] != "clinical":
+        if row["role"] not in ("clinical", "triage"):
             continue
         found = domains.hits(row["text"])
         if found:
