@@ -1,9 +1,100 @@
 {
 	"pages": [ //pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
 		{
+			"path": "pages/auth/index",
+			"style": {
+				"navigationBarTitleText": "登录清诉",
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/index/index",
 			"style": {
-				"navigationBarTitleText": "清诉"
+				"navigationBarTitleText": "清诉",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/workspace/index",
+			"style": {
+				"navigationBarTitleText": "清诉健康工作台",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/profile/index",
+			"style": {
+				"navigationBarTitleText": "完善健康档案",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/vitals/create",
+			"style": {
+				"navigationBarTitleText": "录入血压",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/medications/index",
+			"style": {
+				"navigationBarTitleText": "用药管理",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/account/index",
+			"style": {
+				"navigationBarTitleText": "数据与账户",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/result-detail/index",
+			"style": {
+				"navigationBarTitleText": "分诊详情",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/practice/vue-basics",
+			"style": {
+				"navigationBarTitleText": "Vue 02 练习"
+			}
+		},
+		{
+			"path": "pages/consult/index",
+			"style": {
+				"navigationBarTitleText": "模拟问诊",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/consult/clarify",
+			"style": {
+				"navigationBarTitleText": "补充信息",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/triage/result",
+			"style": {
+				"navigationBarTitleText": "分诊结果",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/index",
+			"style": {
+				"navigationBarTitleText": "健康档案",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/audit/index",
+			"style": {
+				"navigationBarTitleText": "纠偏与评估",
+				"navigationStyle": "custom"
 			}
 		}
 	],
