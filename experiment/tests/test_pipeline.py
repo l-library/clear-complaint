@@ -35,6 +35,8 @@ def _run(
     text: str = "流鼻涕三天了，没有发热",
     draft: dict[str, object] | None = None,
     call_log: list[str] | None = None,
+    portrait: str | None = None,
+    vitals: str | None = None,
 ) -> pipeline.Record:
     calls = call_log if call_log is not None else []
 
@@ -55,6 +57,8 @@ def _run(
         model="glm-5.3",
         repetition=1,
         raw_text=text,
+        portrait=portrait,
+        vitals=vitals,
         known_terms={"感冒", "流行性感冒"},
         departments=DEPARTMENTS,
         index=cast(Index, FakeIndex()),
@@ -228,6 +232,107 @@ def test_department_outside_the_controlled_list_is_rejected() -> None:
 
     assert record.status == "enum_invalid"
     assert record.department is None
+
+
+def test_portrait_enters_both_the_prompt_and_the_retrieval_query() -> None:
+    """接线防线：既往轮画像从未进过提示词，体征变体的数值也从未进过提示词，
+    断线在 runs 里只表现为多一批无差异记录，谁也不会报错。"""
+
+    class Spy:
+        query: str = ""
+        user: str = ""
+
+    class SpyIndex:
+        def search(self, query: str, k: int = 5) -> list[Passage]:
+            Spy.query = query
+            return [
+                Passage(
+                    chunk_id="fake#000",
+                    title="假文件",
+                    heading="临床表现",
+                    text=POOL_TEXT,
+                    score=0.9,
+                )
+            ]
+
+    def spy_call(model: str, messages: list[dict[str, str]]) -> llm.Completion:
+        Spy.user = messages[-1]["content"]
+        return llm.Completion(
+            content=json.dumps(DRAFT, ensure_ascii=False),
+            reasoning_tokens=0,
+            prompt_tokens=10,
+            completion_tokens=20,
+            latency_ms=5,
+        )
+
+    pipeline.run_unit(
+        case_id="c01",
+        variant="V1",
+        arm_name="A0",
+        model="glm-5.3",
+        repetition=1,
+        raw_text="流鼻涕三天了，没有发热",
+        known_terms={"感冒"},
+        departments=DEPARTMENTS,
+        index=cast(Index, SpyIndex()),
+        call=spy_call,
+        portrait="65 岁及以上 · 男 · 慢阻肺十年 · 否认药物过敏",
+        vitals="37.0 ℃ · 血压 120/80 · 心率 80 · 呼吸 18 · 血氧 97%",
+    )
+
+    assert "慢阻肺" in Spy.query
+    assert "【就诊人】" in Spy.user
+    assert "【生命体征】" in Spy.user
+
+
+def test_background_absent_keeps_the_query_pure() -> None:
+    class Spy:
+        query: str = ""
+
+    class SpyIndex:
+        def search(self, query: str, k: int = 5) -> list[Passage]:
+            Spy.query = query
+            return [
+                Passage(
+                    chunk_id="fake#000",
+                    title="假文件",
+                    heading="临床表现",
+                    text=POOL_TEXT,
+                    score=0.9,
+                )
+            ]
+
+    pipeline.run_unit(
+        case_id="c01",
+        variant="V1",
+        arm_name="A0",
+        model="glm-5.3",
+        repetition=1,
+        raw_text="流鼻涕三天了，没有发热",
+        known_terms=set(),
+        departments=DEPARTMENTS,
+        index=cast(Index, SpyIndex()),
+        call=lambda model, messages: llm.Completion(
+            content=json.dumps(DRAFT, ensure_ascii=False),
+            reasoning_tokens=0,
+            prompt_tokens=10,
+            completion_tokens=20,
+            latency_ms=5,
+        ),
+    )
+
+    assert Spy.query == "流鼻涕三天了，没有发热"
+
+
+def test_prompt_sha_shifts_when_background_blocks_are_added() -> None:
+    """prompt_sha 写进记录：同一单元的提示词多了哪个区块，事后都能从数据里核对。"""
+    bare = _run()
+    with_background = _run(
+        portrait="65 岁及以上 · 男 · 既往体健 · 否认药物过敏",
+        vitals="37.0 ℃ · 血压 120/80 · 心率 80 · 呼吸 18 · 血氧 97%",
+    )
+
+    assert bare.params["prompt_sha"] != with_background.params["prompt_sha"]
 
 
 def test_unit_id_carries_the_temperature_only_when_it_differs() -> None:
