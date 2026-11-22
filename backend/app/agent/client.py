@@ -125,8 +125,10 @@ async def invoke_workflow(
         async with asyncio.timeout(
             wf.timeout_seconds if timeout_seconds is None else timeout_seconds
         ):
+            # SSE 在模型生成期间可能长时间无字节，httpx 默认 5 秒读超时会误杀；
+            # 总时长由外层 asyncio.timeout 管，这里只放宽单次读等待
             async with (
-                httpx.AsyncClient(transport=transport) as client,
+                httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(60.0)) as client,
                 client.stream("POST", wf.url, headers=headers, json=payload) as response,
             ):
                 if response.status_code != 200:

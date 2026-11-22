@@ -8,8 +8,9 @@ import asyncio
 import os
 import subprocess
 import sys
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
+from typing import TypeVar
 
 import pytest
 from fastapi.testclient import TestClient
@@ -82,7 +83,8 @@ async def _truncate(engine: AsyncEngine) -> None:
         await connection.execute(
             text(
                 'TRUNCATE "user", consent, refresh_token, profile,'
-                " episode, episode_answer, idempotency_key, reminder"
+                " episode, episode_answer, idempotency_key, reminder,"
+                " followup_record, vital, medication, medication_plan"
                 " RESTART IDENTITY CASCADE"
             )
         )
@@ -114,5 +116,27 @@ def db_execute(test_engine: AsyncEngine) -> Callable[[str], None]:
                 await connection.execute(text(sql))
 
         asyncio.run(_run())
+
+    return run
+
+
+_T = TypeVar("_T")
+
+
+@pytest.fixture
+def run_db(test_engine: AsyncEngine) -> Callable[[Callable[[AsyncSession], Awaitable[_T]]], _T]:
+    """在独立会话与事件循环里执行一次数据库操作，返回结果。
+
+    每次调用全新会话：asyncpg 连接绑死创建它的事件循环，跨循环复用会话必炸。
+    """
+    factory = async_sessionmaker(test_engine, expire_on_commit=False)
+
+    def run(operation: Callable[[AsyncSession], Awaitable[_T]]) -> _T:
+
+        async def wrapper() -> _T:
+            async with factory() as session:
+                return await operation(session)
+
+        return asyncio.run(wrapper())
 
     return run
