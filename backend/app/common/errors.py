@@ -12,11 +12,18 @@ from app.common.codes import ErrorCode
 
 
 class BizException(Exception):
-    """业务层主动抛出的错误，由全局处理器转成统一响应体。"""
+    """业务层主动抛出的错误，由全局处理器转成统一响应体。
 
-    def __init__(self, code: ErrorCode, message: str | None = None) -> None:
+    http_status 仅在同一个错误码对应两种状态时覆盖（如 3004 既有 404 也有 409），
+    其余场景一律走错误码自己的映射表，不允许随手改状态码。
+    """
+
+    def __init__(
+        self, code: ErrorCode, message: str | None = None, *, http_status: int | None = None
+    ) -> None:
         self.code = code
         self.message = message or code.message
+        self.http_status = http_status if http_status is not None else code.http_status
         super().__init__(self.message)
 
 
@@ -29,7 +36,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(BizException)
     async def handle_biz(_: Request, exc: BizException) -> JSONResponse:
         payload: dict[str, Any] = error(exc.code, exc.message).model_dump()
-        return JSONResponse(status_code=exc.code.http_status, content=payload)
+        return JSONResponse(status_code=exc.http_status, content=payload)
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation(_: Request, exc: RequestValidationError) -> JSONResponse:
