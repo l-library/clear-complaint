@@ -8,11 +8,11 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
-from app.account import models  # noqa: F401
+from app.account import models as account_models  # noqa: F401
 from app.core.config import get_settings
 from app.db.base import Base
-
-# 业务模型必须 import 进来，autogenerate 才看得到；新建域包后加到这里
+from app.episode import models as episode_models  # noqa: F401
+from app.reminder import models as reminder_models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
@@ -20,7 +20,7 @@ if config.config_file_name is not None:
 
 config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
-# 业务模型必须 import 进来，autogenerate 才看得到；目前还没有模型，新建后加到这里
+# 新建域包后把它的 models 加进上面的 import，autogenerate 才看得到
 target_metadata = Base.metadata
 
 
