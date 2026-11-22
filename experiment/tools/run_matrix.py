@@ -152,9 +152,18 @@ def main() -> int:
                 "rules": hashlib.sha256(
                     (HERE / "corpus" / "red_flags.json").read_bytes()
                 ).hexdigest(),
+                # 归一表改一个字，检索与 Ain 臂的输入就变；不进指纹，重跑会把新表
+                # 当成旧表条件下的已完成格子跳过
+                "normalize": hashlib.sha256(
+                    (HERE / "harness" / "normalize.py").read_bytes()
+                ).hexdigest(),
                 "max_tokens": llm.MAX_TOKENS,
                 "temperature": args.temperature,
                 "pool": args.pool,
+                # 接线与否不进任何哈希，不显式记进指纹，续跑会把旧文件的格子当已完成跳过
+                "portrait_in_prompt": True,
+                "portrait_in_query": True,
+                "vitals_in_prompt": True,
                 "tag": args.tag,
             },
             sort_keys=True,
@@ -214,6 +223,8 @@ def main() -> int:
             history=(
                 case.history.get(variant[-1]) if variant in case_lib.HISTORY_VARIANTS else None
             ),
+            portrait=_portrait(case),
+            vitals=_vitals(case, variant),
             known_terms=known,
             departments=departments,
             index=pool_for(case),

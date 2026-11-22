@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import time
@@ -191,7 +192,10 @@ def run_unit(
         record.status = "clarification"
         return record
 
-    passages = index.search(complaint, k=5)
+    # 检索查询并上画像：条件翻转病例族的判据长在「人群」章节（成人、免疫抑制、老年），
+    # 只搜主诉永远捞不到。画像有则并入，没有则保持纯主诉，两种形态都进 prompt_sha。
+    query = f"{portrait}；{complaint}" if portrait else complaint
+    passages = index.search(query, k=5)
     record.passage_ids = [passage.chunk_id for passage in passages]
     messages = arms.build_messages(
         arm_name,
@@ -203,6 +207,11 @@ def run_unit(
         portrait,
         vitals,
     )
+    # 渲染后的提示词哈希写进记录：接线断没断、区块进没进，都能从数据里核对，
+    # 不用猜。V7 体征从未进过提示词这类缺陷，靠它能当场暴露。
+    record.params["prompt_sha"] = hashlib.sha256(
+        json.dumps(messages, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()[:12]
 
     started = time.monotonic()
     try:

@@ -14,7 +14,7 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from tools import fetch, roles
+from tools import fetch, roles, triage_pool
 
 HERE = Path(__file__).resolve().parent.parent
 CORPUS = HERE / "corpus"
@@ -213,9 +213,17 @@ def main() -> int:
         unique.append(chunk)
     chunks = unique
 
+    payload = [asdict(chunk) for chunk in chunks]
+    # 受控表里的分诊判据片段改标为 triage，语料重建后补充池不丢（corpus/triage_pool.json）
+    flipped, missing = triage_pool.apply(payload)
+    if missing:
+        print(f"[warn] triage 受控表有 {len(missing)} 条未命中: {missing}")
+    else:
+        print(f"[info] triage 判据片段 {flipped} 条标记完成")
+
     with (CORPUS / "chunks.jsonl").open("w", encoding="utf-8") as handle:
-        for chunk in chunks:
-            handle.write(json.dumps(asdict(chunk), ensure_ascii=False) + "\n")
+        for row in payload:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     lengths = [len(chunk.text) for chunk in chunks]
     print(f"[info] 文件 {len(sources)} 份，片段 {len(chunks)} 条")

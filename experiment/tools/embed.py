@@ -121,13 +121,17 @@ def top_k(matrix: np.ndarray, query: np.ndarray, k: int) -> list[tuple[int, floa
 
 
 def _pool() -> list[dict[str, str]]:
-    """检索池只放 clinical 片段。治疗段落里有剂量与方剂，检索到就会诱发用药建议。"""
+    """检索池放 clinical 与 triage 片段。
+    治疗段落里的剂量与方剂不进池（检索到就会诱发用药建议）；triage 是受控表
+    corpus/triage_pool.json 里逐条策展的分诊判据：住院标准、就医与居家指征、
+    重症高危人群判据，它们住在治疗/预防/流行病学章节里，却是分诊的直接依据。
+    """
     rows = [
         json.loads(line)
         for line in (CORPUS / "chunks.jsonl").read_text("utf-8").splitlines()
         if line
     ]
-    return [row for row in rows if row["role"] == "clinical"]
+    return [row for row in rows if row["role"] in ("clinical", "triage")]
 
 
 def _normalize(matrix: np.ndarray) -> np.ndarray:
@@ -153,7 +157,7 @@ def build() -> int:
                 "count": int(vectors.shape[0]),
                 "normalized": True,
                 "chunks_sha256": hashlib.sha256((CORPUS / "chunks.jsonl").read_bytes()).hexdigest(),
-                "pool": "clinical only",
+                "pool": "clinical + triage",
                 "text_template": "title｜heading｜text",
             },
             ensure_ascii=False,

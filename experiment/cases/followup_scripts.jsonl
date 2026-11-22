@@ -1,0 +1,24 @@
+{"family": "F01", "case_id": "F01B", "direction": "better", "message": "过了三天烧退了，就剩一点咳嗽，别的都没事", "expected_rf": []}
+{"family": "F01", "case_id": "F01B", "direction": "same", "message": "过了三天还是老样子，还是三十八度五，咳嗽嗓子疼没变", "expected_rf": []}
+{"family": "F01", "case_id": "F01B", "direction": "worse_noflag", "message": "过了三天感觉更重了，咳嗽变深了，浑身更酸，量了下三十八度八", "expected_rf": []}
+{"family": "F01", "case_id": "F01B", "direction": "worse_rf", "message": "过了三天没好，烧到三十九度八，一直退不下来", "expected_rf": ["RF06"]}
+{"family": "F02", "case_id": "F02B", "direction": "better", "message": "过了两天水泡开始结痂了，不怎么痒了，也不发烧了", "expected_rf": []}
+{"family": "F02", "case_id": "F02B", "direction": "same", "message": "过了两天还是那些水泡，还是痒，有点低热", "expected_rf": []}
+{"family": "F02", "case_id": "F02B", "direction": "worse_noflag", "message": "过了两天水泡比之前多了些，烧到三十八度三，人比之前蔫", "expected_rf": []}
+{"family": "F02", "case_id": "F02B", "direction": "worse_rf", "message": "过了两天水泡更多了，孩子一直想睡，叫不太醒", "expected_rf": ["RF01"]}
+{"family": "F03", "case_id": "F03B", "direction": "better", "message": "过了两天基本好了，一天一次成形便，肚子不疼了", "expected_rf": []}
+{"family": "F03", "case_id": "F03B", "direction": "same", "message": "过了两天还是一天五六次稀水，肚子还是有点绞着疼", "expected_rf": []}
+{"family": "F03", "case_id": "F03B", "direction": "worse_noflag", "message": "过了两天没见好，一天七八次，人发虚，有点头晕", "expected_rf": []}
+{"family": "F03", "case_id": "F03B", "direction": "worse_rf", "message": "过了两天更厉害了，一天十几次稀水，尿很少", "expected_rf": ["RF09", "RF10"]}
+{"family": "F04", "case_id": "F04B", "direction": "better", "message": "过了三天咳嗽好多了，就早上咳两声，鼻子也通了", "expected_rf": []}
+{"family": "F04", "case_id": "F04B", "direction": "same", "message": "过了三天还是老样子，咳嗽鼻塞都没变", "expected_rf": []}
+{"family": "F04", "case_id": "F04B", "direction": "worse_noflag", "message": "过了三天咳得更凶了，痰变黄变稠，人更没劲", "expected_rf": []}
+{"family": "F04", "case_id": "F04B", "direction": "worse_rf", "message": "过了三天反而重了，喘得厉害，走几步就上不来气", "expected_rf": ["RF03"]}
+{"family": "F05", "case_id": "F05B", "direction": "better", "message": "过了四天腿肿消了大半，早上起来基本看不出来了，人也有劲了", "expected_rf": []}
+{"family": "F05", "case_id": "F05B", "direction": "same", "message": "过了四天还是老样子，腿还是有点肿，人还是容易累", "expected_rf": []}
+{"family": "F05", "case_id": "F05B", "direction": "worse_noflag", "message": "过了四天肿得比之前厉害，按下去坑更深，人更疲乏", "expected_rf": []}
+{"family": "F05", "case_id": "F05B", "direction": "worse_rf", "message": "过了四天更重了，晚上憋醒，躺不平，腿肿得更厉害", "expected_rf": ["RF03"]}
+{"family": "F06", "case_id": "F06B", "direction": "better", "message": "过了一周量了几天，血压都在一百三、八五左右，头也不晕", "expected_rf": []}
+{"family": "F06", "case_id": "F06B", "direction": "same", "message": "过了一周又量了几次，还是一百五五、九五左右，没什么不舒服", "expected_rf": []}
+{"family": "F06", "case_id": "F06B", "direction": "worse_noflag", "message": "过了一周还是一百六、一百，后脑勺发紧，白天有点晕", "expected_rf": []}
+{"family": "F06", "case_id": "F06B", "direction": "worse_rf", "message": "过了一周血压更高了，一百七、一百零五，头疼得厉害", "expected_rf": ["RF11"]}
