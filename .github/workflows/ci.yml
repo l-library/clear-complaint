@@ -43,6 +43,39 @@ jobs:
         working-directory: backend
         run: uv run pytest
 
+  experiment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      # 只跑不花钱的部分：归一化、红旗、引用闸门、指标重算。
+      # 真实模型调用与 embedding 都要凭据，永远不进 CI。
+      - name: Install
+        working-directory: experiment
+        run: uv sync --frozen
+
+      - name: Lint
+        working-directory: experiment
+        run: uv run ruff check .
+
+      - name: Format check
+        working-directory: experiment
+        run: uv run ruff format --check .
+
+      - name: Type check
+        working-directory: experiment
+        run: uv run mypy
+
+      - name: Test
+        working-directory: experiment
+        run: uv run pytest
+
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 20
