@@ -196,7 +196,7 @@ The table lists what we deliberately put off. Doing any of it means changing thi
 | --- | --- | --- |
 | Account tables (`user`/`consent`/`refresh_token`/`profile`) | Created (V1, V2) | `episode` and the other business tables land per domain, field design per docs/api.md |
 | AgentArts client | Wired (client layer) | `app/agent/client.py`: the 16.2 transport (SSE terminal detection, protocol and request_id checks, 4001-4003 mapping) has been smoke-tested against real Profile-Intake and Triage runs; episode-flow wiring (M4) and the gates are not done |
-| Normalization, red flag short-circuit, citation gate | Not written | These are the backend trunk; they wait for the corpus and eval set to take shape |
+| Normalization, red flag short-circuit, citation gate, vocab and department tables | Written (M5) | `app/agent/normalize.py, redflag.py, citation.py, vocab.py, departments.py` plus `data/` (three frozen tables, version 1), copied from experiment and maintained independently; test assertions come from handoff/constraints.md. Known edge: the 6-char negation window swallows a second true hit immediately after a negation |
 | Authentication | Done (account domain) | HS256 access token 2h, refresh token 30d with rotation (replay is 1005); register/login/refresh/logout live, other domains adopt `get_current_user` as needed |
 | Mini program appid | Not applied | Required before testing on a real device |
 | Test database | Wired | `tests/conftest.py` rebuilds `clear_complaint_test` every session (env `TEST_DATABASE_URL`, default `localhost:5432`) and runs `alembic upgrade head`; the CI backend job carries `services: postgres` |

@@ -196,7 +196,7 @@ Closes #34.
 | --- | --- | --- |
 | 账号四表（`user`/`consent`/`refresh_token`/`profile`） | 已建（V1、V2） | `episode` 等业务表按域逐个补迁移，字段设计依 docs/api.md |
 | AgentArts 客户端 | 已接入（客户端层） | `app/agent/client.py`：16.2 传输层（SSE 终态判定、协议与 request_id 核对、4001–4003 映射）已对 Profile-Intake 与 Triage 真流联调；问诊流接入（M4）与闸门未做 |
-| 归一化、红旗短路、引用核验 | 未写 | 这三块是后端主干，等语料和评测集有形状再动手 |
+| 归一化、红旗短路、引用核验、受控词表与科室表 | 已写（M5） | `app/agent/normalize.py、redflag.py、citation.py、vocab.py、departments.py` + `data/` 三张冻结表（版本 1），复制自 experiment 并独立维护；测试断言取自 handoff/constraints.md。已知边界：否定 6 字窗口会盖住紧随其后的第二个真命中 |
 | 登录鉴权 | 已做（账号域） | HS256 访问令牌 2h、刷新令牌 30 天轮换（重放 1005）；注册/登录/刷新/登出已上线，其他域按需接 `get_current_user` |
 | 小程序 appid | 未申请 | 真机调试前必须补 |
 | 测试数据库 | 已接 | `tests/conftest.py` 每个会话重建 `clear_complaint_test`（环境变量 `TEST_DATABASE_URL`，默认 `localhost:5432`）并执行 `alembic upgrade head`；CI 的 backend job 带 `services: postgres` |
