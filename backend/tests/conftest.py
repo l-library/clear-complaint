@@ -8,7 +8,7 @@ import asyncio
 import os
 import subprocess
 import sys
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -80,7 +80,11 @@ def test_engine(migrated_db: str) -> Iterator[AsyncEngine]:
 async def _truncate(engine: AsyncEngine) -> None:
     async with engine.begin() as connection:
         await connection.execute(
-            text('TRUNCATE "user", consent, refresh_token, profile RESTART IDENTITY CASCADE')
+            text(
+                'TRUNCATE "user", consent, refresh_token, profile,'
+                " episode, episode_answer, idempotency_key, reminder"
+                " RESTART IDENTITY CASCADE"
+            )
         )
 
 
@@ -98,3 +102,17 @@ def db_client(test_engine: AsyncEngine) -> Iterator[TestClient]:
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.pop(get_session, None)
+
+
+@pytest.fixture
+def db_execute(test_engine: AsyncEngine) -> Callable[[str], None]:
+    """直改测试库数据的口子：过期、改状态这类用例不想绕业务接口。"""
+
+    def run(sql: str) -> None:
+        async def _run() -> None:
+            async with test_engine.begin() as connection:
+                await connection.execute(text(sql))
+
+        asyncio.run(_run())
+
+    return run
