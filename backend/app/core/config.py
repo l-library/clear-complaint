@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # 默认关闭：测试与 CI 不受后台写库影响；生产与本地演示经 .env 打开
     scheduler_enabled: bool = False
 
+    # 导出包落盘目录。CI/测试不设；生产由环境变量注入
+    export_dir: str = ""
+
     # 隐私政策版本与链接：GET /api/meta/privacy 返回，注册时校验 consent_version
     privacy_version: str = "2026-11-01"
     privacy_policy_url: str = "https://example.com/privacy"
