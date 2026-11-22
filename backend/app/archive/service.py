@@ -5,16 +5,22 @@
 """
 
 import re
+from collections import Counter
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.account.service import get_profile
+from app.agent.normalize import COLLOQUIAL_MAP
 from app.archive.models import Medication, MedicationPlan, Vital
 from app.common.clock import format_shanghai, now_shanghai
 from app.common.codes import ErrorCode
 from app.common.errors import BizException
+from app.episode import service as episode_service
+from app.reminder import service as reminder_service
 
 _TIME = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
@@ -429,3 +435,143 @@ __all__ = [
     "update_plan",
     "update_vital",
 ]
+
+
+# ---- 档案聚合（docs/api.md 第 9 节） ----
+
+
+async def _latest_vital(session: AsyncSession, user_id: int, kind: str) -> Vital | None:
+    return await session.scalar(
+        select(Vital)
+        .where(Vital.user_id == user_id, Vital.kind == kind)
+        .order_by(Vital.measured_at.desc())
+        .limit(1)
+    )
+
+
+def _bmi(height_cm: object, weight_kg: object) -> float | None:
+    if not isinstance(height_cm, (int, float, Decimal)) or not isinstance(
+        weight_kg, (int, float, Decimal)
+    ):
+        return None
+    meters = float(height_cm) / 100
+    return round(float(weight_kg) / (meters * meters), 1)
+
+
+async def overview(session: AsyncSession, user_id: int) -> dict[str, object]:
+    """档案首页一次性取数（api.md 9.1），避免首屏多次请求。"""
+    profile = await get_profile(session, user_id)
+    height = await _latest_vital(session, user_id, "height")
+    weight = await _latest_vital(session, user_id, "weight")
+    bp = await _latest_vital(session, user_id, "bp")
+    since_90d = now_shanghai() - timedelta(days=90)
+
+    latest_bp = None
+    if bp is not None:
+        latest_bp = {
+            "measured_at": format_shanghai(bp.measured_at),
+            "systolic": bp.systolic,
+            "diastolic": bp.diastolic,
+            "pulse": bp.pulse,
+        }
+    return {
+        "profile": profile.model_dump() if profile is not None else None,
+        "vitals": {
+            "latest_height_cm": (
+                float(height.height_cm)
+                if height is not None and height.height_cm is not None
+                else None
+            ),
+            "latest_weight_kg": (
+                float(weight.weight_kg)
+                if weight is not None and weight.weight_kg is not None
+                else None
+            ),
+            "bmi": _bmi(
+                height.height_cm if height is not None else None,
+                weight.weight_kg if weight is not None else None,
+            ),
+            "latest_bp": latest_bp,
+        },
+        "trend_summary": {
+            "episodes_90d": await episode_service.saved_episode_count(session, user_id, since_90d),
+            "latest_triage": await episode_service.latest_saved_triage(session, user_id),
+        },
+        "pending": await reminder_service.pending_counts(session, user_id),
+    }
+
+
+async def trend(session: AsyncSession, user_id: int, days: int, limit: int) -> dict[str, object]:
+    """趋势取数（api.md 9.2）。三个点序列都取最近 limit 条后按时间升序返回。"""
+    since = now_shanghai() - timedelta(days=days)
+
+    triage_rows = await episode_service.saved_triage_points(session, user_id, since, limit)
+
+    weight_rows = (
+        (
+            await session.execute(
+                select(Vital)
+                .where(Vital.user_id == user_id, Vital.kind == "weight")
+                .where(Vital.measured_at >= since)
+                .order_by(Vital.measured_at.desc())
+                .limit(limit * 3)  # 同日多测要先去重再截断
+            )
+        )
+        .scalars()
+        .all()
+    )
+    weight_by_day: dict[str, float] = {}
+    for row in sorted(weight_rows, key=lambda item: item.measured_at):
+        if row.weight_kg is not None:
+            weight_by_day[row.measured_at.date().isoformat()] = float(row.weight_kg)
+    weight_points = [
+        {"at": day, "weight_kg": value} for day, value in sorted(weight_by_day.items())
+    ][-limit:]
+
+    bp_rows = (
+        (
+            await session.execute(
+                select(Vital)
+                .where(Vital.user_id == user_id, Vital.kind == "bp")
+                .where(Vital.measured_at >= since)
+                .order_by(Vital.measured_at.desc())
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    bp_points = [
+        {
+            "at": format_shanghai(row.measured_at),
+            "systolic": row.systolic,
+            "diastolic": row.diastolic,
+        }
+        for row in sorted(bp_rows, key=lambda item: item.measured_at)
+    ]
+
+    # 关键词：symptom 目前存的是归一化后的整句折算文本（字段级抽取未落地），
+    # 可统计的受控症状词面取自归一化映射表的临床词侧（流涕、腹泻、胸痛……）。
+    # 抽取落地后 symptom 变成词条列表，这条统计自然收敛为逐词计数。
+    counter: Counter[str] = Counter()
+    surfaces = sorted(
+        {clinical for _, clinical in COLLOQUIAL_MAP if len(clinical) >= 2},
+        key=len,
+        reverse=True,
+    )
+    for text in await episode_service.saved_symptom_texts(session, user_id, since):
+        for surface in surfaces:
+            if surface in text:
+                counter[surface] += 1
+
+    return {
+        "triage_points": triage_rows,
+        "weight_points": weight_points,
+        "bp_points": bp_points,
+        "symptom_keywords": [
+            {"term": term, "count": count} for term, count in counter.most_common(5)
+        ],
+    }
+
+
+__all__.extend(["overview", "trend"])

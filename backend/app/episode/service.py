@@ -11,7 +11,7 @@ import json
 import logging
 import uuid
 from collections.abc import AsyncIterator
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
@@ -953,15 +953,91 @@ async def delete_episode(session: AsyncSession, user_id: int, episode_id: int) -
     await session.commit()
 
 
+async def saved_triage_points(
+    session: AsyncSession, user_id: int, since: datetime, limit: int
+) -> list[dict[str, object]]:
+    """已保存问诊的档位序列（档案聚合用），时间倒序取最近的 limit 条。"""
+    rows = (
+        (
+            await session.execute(
+                select(Episode)
+                .where(Episode.user_id == user_id, Episode.status == STATUS_SAVED)
+                .where(Episode.created_at >= since)
+                .order_by(Episode.created_at.desc())
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        {
+            "at": format_shanghai(row.created_at),
+            "triage": (row.result or {}).get("triage"),
+        }
+        for row in rows
+    ]
+
+
+async def saved_episode_count(session: AsyncSession, user_id: int, since: datetime) -> int:
+    query = (
+        select(func.count())
+        .select_from(Episode)
+        .where(Episode.user_id == user_id, Episode.status == STATUS_SAVED)
+        .where(Episode.created_at >= since)
+    )
+    return int(await session.scalar(query) or 0)
+
+
+async def latest_saved_triage(session: AsyncSession, user_id: int) -> str | None:
+    row = await session.scalar(
+        select(Episode)
+        .where(Episode.user_id == user_id, Episode.status == STATUS_SAVED)
+        .order_by(Episode.created_at.desc())
+        .limit(1)
+    )
+    if row is None:
+        return None
+    triage = (row.result or {}).get("triage")
+    return str(triage) if triage else None
+
+
+async def saved_symptom_texts(session: AsyncSession, user_id: int, since: datetime) -> list[str]:
+    """已保存问诊的 symptom 折算文本（档案聚合的关键词统计用）。"""
+    rows = (
+        (
+            await session.execute(
+                select(Episode.normalized)
+                .where(Episode.user_id == user_id, Episode.status == STATUS_SAVED)
+                .where(Episode.created_at >= since)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    texts: list[str] = []
+    for normalized in rows:
+        if not isinstance(normalized, dict):
+            continue
+        symptom = normalized.get("symptom")
+        if isinstance(symptom, list):
+            texts.extend(str(item) for item in symptom if isinstance(item, str))
+    return texts
+
+
 __all__ = [
     "create_episode",
     "delete_episode",
     "episode_detail",
     "episode_events",
     "list_episodes",
+    "latest_saved_triage",
     "parse_idempotency_key",
     "retry_episode",
     "save_episode",
+    "saved_episode_count",
+    "saved_symptom_texts",
+    "saved_triage_points",
     "skip_clarify",
     "submit_clarify",
 ]
