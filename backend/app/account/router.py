@@ -58,3 +58,24 @@ async def privacy_meta() -> ApiResponse[schema.PrivacyMeta]:
             sensitive_policy_url=settings.sensitive_policy_url,
         )
     )
+
+
+@router.get("/profile")
+async def get_profile(session: SessionDep, user: CurrentUser) -> ApiResponse[schema.ProfileData]:
+    profile = await service.get_profile(session, user.id)
+    return ok(schema.ProfileData(profile=profile))
+
+
+@router.put("/profile")
+async def update_profile(
+    payload: schema.ProfileUpdate, session: SessionDep, user: CurrentUser
+) -> ApiResponse[schema.Profile]:
+    profile = await service.update_profile(session, user, payload)
+    return ok(profile)
+
+
+@router.get("/profile/privacy")
+async def profile_privacy(
+    session: SessionDep, user: CurrentUser
+) -> ApiResponse[schema.PrivacyRecord]:
+    return ok(await service.privacy_record(session, user.id))

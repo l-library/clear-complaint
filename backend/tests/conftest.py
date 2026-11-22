@@ -80,7 +80,7 @@ def test_engine(migrated_db: str) -> Iterator[AsyncEngine]:
 async def _truncate(engine: AsyncEngine) -> None:
     async with engine.begin() as connection:
         await connection.execute(
-            text('TRUNCATE "user", consent, refresh_token RESTART IDENTITY CASCADE')
+            text('TRUNCATE "user", consent, refresh_token, profile RESTART IDENTITY CASCADE')
         )
 
 

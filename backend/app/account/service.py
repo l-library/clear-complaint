@@ -9,7 +9,7 @@ import hashlib
 import hmac
 import re
 import secrets
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Annotated, Any
 
 import jwt
@@ -18,8 +18,19 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.account.models import Consent, RefreshToken, User
-from app.account.schema import AuthData, LoginRequest, RegisterRequest, TokenPair, UserOut
+from app.account.models import Consent, Profile, RefreshToken, User
+from app.account.schema import (
+    AuthData,
+    LoginRequest,
+    PrivacyRecord,
+    ProfileUpdate,
+    RegisterRequest,
+    TokenPair,
+    UserOut,
+)
+from app.account.schema import (
+    Profile as ProfileOut,
+)
 from app.common.clock import format_shanghai, now_shanghai
 from app.common.codes import ErrorCode
 from app.common.errors import BizException
@@ -136,7 +147,8 @@ async def register(session: AsyncSession, payload: RegisterRequest) -> AuthData:
     )
     tokens = await _token_pair(session, user)
     await session.refresh(user)
-    return AuthData(user=_user_out(user), tokens=tokens, profile_complete=False)
+    complete = await _profile_complete(session, user.id)
+    return AuthData(user=_user_out(user), tokens=tokens, profile_complete=complete)
 
 
 def _check_lockout(phone: str) -> None:
@@ -159,7 +171,8 @@ async def login(session: AsyncSession, payload: LoginRequest) -> AuthData:
         raise BizException(ErrorCode.LOGIN_CREDENTIALS_WRONG)
     _login_failures.pop(payload.phone, None)
     tokens = await _token_pair(session, user)
-    return AuthData(user=_user_out(user), tokens=tokens, profile_complete=False)
+    complete = await _profile_complete(session, user.id)
+    return AuthData(user=_user_out(user), tokens=tokens, profile_complete=complete)
 
 
 async def refresh_tokens(session: AsyncSession, token: str) -> TokenPair:
@@ -223,10 +236,164 @@ async def get_current_user(
 
 __all__ = [
     "get_current_user",
+    "get_profile",
     "hash_password",
     "login",
     "logout",
+    "privacy_record",
     "refresh_tokens",
     "register",
+    "update_profile",
     "verify_password",
 ]
+
+
+# ---- 档案（docs/api.md 第 6 节） ----
+
+_SEX_VALUES = ("male", "female", "undisclosed")
+_EARLIEST_BIRTH = date(1900, 1, 1)
+
+
+async def _profile_complete(session: AsyncSession, user_id: int) -> bool:
+    """必填项只有 birth_date 与 sex（docs/api.md 2.3、16.4 的公共口径）。"""
+    row = await session.scalar(select(Profile).where(Profile.user_id == user_id))
+    return row is not None and row.birth_date is not None and row.sex is not None
+
+
+def _age_years(born: date) -> int:
+    today = now_shanghai().date()
+    years = today.year - born.year
+    if (today.month, today.day) < (born.month, born.day):
+        years -= 1
+    return years
+
+
+def _profile_out(row: Profile) -> ProfileOut:
+    missing: list[str] = []
+    if row.birth_date is None:
+        missing.append("birth_date")
+    if row.sex is None:
+        missing.append("sex")
+    return ProfileOut(
+        name=row.name,
+        birth_date=row.birth_date.isoformat() if row.birth_date is not None else None,
+        age_years=_age_years(row.birth_date) if row.birth_date is not None else None,
+        sex=row.sex,
+        city_code=row.city_code,
+        city_name=row.city_name,
+        conditions=row.conditions,
+        condition_note=row.condition_note,
+        allergies=row.allergies,
+        allergy_note=row.allergy_note,
+        required_missing=missing,
+        updated_at=format_shanghai(row.updated_at),
+    )
+
+
+def _parse_birth_date(raw: str) -> date:
+    try:
+        born = date.fromisoformat(raw)
+    except ValueError:
+        raise BizException(ErrorCode.INVALID_PARAM, "birth_date 须为 yyyy-MM-dd") from None
+    if born < _EARLIEST_BIRTH or born > now_shanghai().date():
+        raise BizException(ErrorCode.INVALID_PARAM, "birth_date 须在 1900-01-01 与今天之间")
+    return born
+
+
+def _check_terms(items: list[str] | None, field: str) -> list[str] | None:
+    """conditions/allergies 的条目校验；None 与 [] 都原样落库（语义不同）。"""
+    if items is None:
+        return None
+    if len(items) > 10:
+        raise BizException(ErrorCode.INVALID_PARAM, f"{field} 最多 10 项")
+    for item in items:
+        if not item or len(item) > 20:
+            raise BizException(ErrorCode.INVALID_PARAM, f"{field} 每项须为 1 到 20 字")
+    return items
+
+
+def _check_note(note: str | None, field: str) -> str | None:
+    if note is None:
+        return None
+    note = note.strip()
+    if len(note) > 200:
+        raise BizException(ErrorCode.INVALID_PARAM, f"{field} 不能超过 200 字")
+    return note or None
+
+
+def _validate_update(payload: ProfileUpdate, fields: set[str]) -> dict[str, object]:
+    """校验并归一 PUT 的字段。fields 是 model_fields_set，区分"未提交"与"提交空值"。"""
+    values: dict[str, object] = {}
+    if "name" in fields:
+        name = payload.name
+        if name is not None and len(name.strip()) == 0:
+            name = None
+        if name is not None and len(name) > 40:
+            raise BizException(ErrorCode.INVALID_PARAM, "name 不能超过 40 字")
+        values["name"] = name
+    if "birth_date" in fields:
+        values["birth_date"] = (
+            _parse_birth_date(payload.birth_date) if payload.birth_date is not None else None
+        )
+    if "sex" in fields:
+        if payload.sex is not None and payload.sex not in _SEX_VALUES:
+            raise BizException(ErrorCode.INVALID_PARAM, "sex 取值须为 male/female/undisclosed")
+        values["sex"] = payload.sex
+    if {"city_code", "city_name"} & fields:
+        # 城市成对提交或成对清空，只提交一边按参数错误处理
+        if {"city_code", "city_name"} - fields:
+            raise BizException(ErrorCode.INVALID_PARAM, "city_code 与 city_name 须同时提交")
+        code, city = payload.city_code, payload.city_name
+        if code is None and city is None:
+            values["city_code"] = None
+            values["city_name"] = None
+        elif code is not None and city is not None:
+            if len(code) != 6 or not code.isdigit():
+                raise BizException(ErrorCode.INVALID_PARAM, "city_code 须为 6 位行政区划码")
+            if not city or len(city) > 40:
+                raise BizException(ErrorCode.INVALID_PARAM, "city_name 须为 1 到 40 字")
+            values["city_code"] = code
+            values["city_name"] = city
+        else:
+            raise BizException(ErrorCode.INVALID_PARAM, "city_code 与 city_name 须成对提交")
+    if "conditions" in fields:
+        values["conditions"] = _check_terms(payload.conditions, "conditions")
+    if "condition_note" in fields:
+        values["condition_note"] = _check_note(payload.condition_note, "condition_note")
+    if "allergies" in fields:
+        values["allergies"] = _check_terms(payload.allergies, "allergies")
+    if "allergy_note" in fields:
+        values["allergy_note"] = _check_note(payload.allergy_note, "allergy_note")
+    return values
+
+
+async def get_profile(session: AsyncSession, user_id: int) -> ProfileOut | None:
+    row = await session.scalar(select(Profile).where(Profile.user_id == user_id))
+    return _profile_out(row) if row is not None else None
+
+
+async def update_profile(session: AsyncSession, user: User, payload: ProfileUpdate) -> ProfileOut:
+    values = _validate_update(payload, set(payload.model_fields_set))
+    row = await session.scalar(select(Profile).where(Profile.user_id == user.id))
+    if row is None:
+        row = Profile(user_id=user.id)
+        session.add(row)
+    for key, value in values.items():
+        setattr(row, key, value)
+    await session.commit()
+    await session.refresh(row)
+    return _profile_out(row)
+
+
+async def privacy_record(session: AsyncSession, user_id: int) -> PrivacyRecord:
+    current = get_settings().privacy_version
+    row = await session.scalar(
+        select(Consent).where(Consent.user_id == user_id).order_by(Consent.created_at.desc())
+    )
+    consented = row.version if row is not None else None
+    return PrivacyRecord(
+        current_version=current,
+        consented_version=consented,
+        consented_at=format_shanghai(row.created_at) if row is not None else None,
+        outdated=consented != current,
+    )

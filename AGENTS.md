@@ -194,7 +194,7 @@ The table lists what we deliberately put off. Doing any of it means changing thi
 
 | Item | Status | Notes |
 | --- | --- | --- |
-| Account tables (`user`/`consent`/`refresh_token`) | Created (V1) | `episode` and the other business tables land per domain, field design per docs/api.md |
+| Account tables (`user`/`consent`/`refresh_token`/`profile`) | Created (V1, V2) | `episode` and the other business tables land per domain, field design per docs/api.md |
 | AgentArts client | Not wired | Only `/ping` and `/health` exist, no platform call code yet |
 | Normalization, red flag short-circuit, citation gate | Not written | These are the backend trunk; they wait for the corpus and eval set to take shape |
 | Authentication | Done (account domain) | HS256 access token 2h, refresh token 30d with rotation (replay is 1005); register/login/refresh/logout live, other domains adopt `get_current_user` as needed |
