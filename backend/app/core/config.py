@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     access_token_seconds: int = 2 * 60 * 60
     refresh_token_days: int = 30
 
+    # AgentArts 三条工作流（docs/api-agentarts.md 16.1）。Key 只经环境变量注入，永不入库
+    agentarts_profile_intake_url: str = ""
+    agentarts_followup_supplement_url: str = ""
+    agentarts_triage_url: str = ""
+    agentarts_profile_intake_api_key: str = ""
+    agentarts_followup_supplement_api_key: str = ""
+    agentarts_triage_api_key: str = ""
+    agentarts_invoke_mode: str = "published"
+
     # 隐私政策版本与链接：GET /api/meta/privacy 返回，注册时校验 consent_version
     privacy_version: str = "2026-11-01"
     privacy_policy_url: str = "https://example.com/privacy"

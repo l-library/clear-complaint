@@ -195,7 +195,7 @@ The table lists what we deliberately put off. Doing any of it means changing thi
 | Item | Status | Notes |
 | --- | --- | --- |
 | Account tables (`user`/`consent`/`refresh_token`/`profile`) | Created (V1, V2) | `episode` and the other business tables land per domain, field design per docs/api.md |
-| AgentArts client | Not wired | Only `/ping` and `/health` exist, no platform call code yet |
+| AgentArts client | Wired (client layer) | `app/agent/client.py`: the 16.2 transport (SSE terminal detection, protocol and request_id checks, 4001-4003 mapping) has been smoke-tested against real Profile-Intake and Triage runs; episode-flow wiring (M4) and the gates are not done |
 | Normalization, red flag short-circuit, citation gate | Not written | These are the backend trunk; they wait for the corpus and eval set to take shape |
 | Authentication | Done (account domain) | HS256 access token 2h, refresh token 30d with rotation (replay is 1005); register/login/refresh/logout live, other domains adopt `get_current_user` as needed |
 | Mini program appid | Not applied | Required before testing on a real device |
