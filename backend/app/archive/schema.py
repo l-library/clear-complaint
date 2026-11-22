@@ -103,3 +103,17 @@ class MedicationPlanUpdate(BaseModel):
 
 class MedicationPlanList(BaseModel):
     records: list[MedicationPlanOut]
+
+
+class ArchiveOverview(BaseModel):
+    profile: dict[str, object] | None
+    vitals: dict[str, object]
+    trend_summary: dict[str, object]
+    pending: dict[str, object]
+
+
+class ArchiveTrend(BaseModel):
+    triage_points: list[dict[str, object]]
+    weight_points: list[dict[str, object]]
+    bp_points: list[dict[str, object]]
+    symptom_keywords: list[dict[str, object]]

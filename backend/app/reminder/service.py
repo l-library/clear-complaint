@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.common.clock import now_shanghai
 from app.common.codes import ErrorCode
 from app.common.errors import BizException
@@ -73,3 +76,21 @@ def create_episode_reminder(
             body="按问诊建议尽快就诊，带上问诊记录与正在服用的药物清单。",
         )
     return None
+
+
+async def pending_counts(session: AsyncSession, user_id: int) -> dict[str, int]:
+    """按 kind 数待处理提醒（档案聚合用）。未处理不等于未到期，口径就是 status=pending。"""
+    rows = (
+        await session.execute(
+            select(m.Reminder.kind, func.count())
+            .where(m.Reminder.user_id == user_id, m.Reminder.status == m.STATUS_PENDING)
+            .group_by(m.Reminder.kind)
+        )
+    ).all()
+    counts = {kind: int(count) for kind, count in rows}
+    return {
+        "total": sum(counts.values()),
+        "medication": counts.get(m.KIND_MEDICATION, 0),
+        "followup": counts.get(m.KIND_FOLLOWUP, 0),
+        "recheck": counts.get(m.KIND_RECHECK, 0),
+    }

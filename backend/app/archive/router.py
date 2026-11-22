@@ -165,3 +165,20 @@ async def update_plan(
 async def delete_plan(plan_id: int, session: SessionDep, user: CurrentUser) -> ApiResponse[None]:
     await service.delete_plan(session, user.id, plan_id)
     return ok(None)
+
+
+@router.get("/archive/overview")
+async def archive_overview(
+    session: SessionDep, user: CurrentUser
+) -> ApiResponse[schema.ArchiveOverview]:
+    return ok(schema.ArchiveOverview(**await service.overview(session, user.id)))
+
+
+@router.get("/archive/trend")
+async def archive_trend(
+    session: SessionDep,
+    user: CurrentUser,
+    days: Annotated[int, Query(ge=1, le=365)] = 90,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> ApiResponse[schema.ArchiveTrend]:
+    return ok(schema.ArchiveTrend(**await service.trend(session, user.id, days, limit)))
