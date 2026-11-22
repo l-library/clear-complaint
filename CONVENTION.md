@@ -194,10 +194,10 @@ Closes #34.
 
 | 事项 | 现状 | 备注 |
 | --- | --- | --- |
-| `episode` / `condition` / `citation` 等业务表 | 未建 | 字段设计见 `docs/PLAN.md`，定了再写 `V1__init` 迁移 |
+| 账号三表（`user`/`consent`/`refresh_token`） | 已建（V1） | `episode` 等业务表按域逐个补迁移，字段设计依 docs/api.md |
 | AgentArts 客户端 | 未接入 | 目前只有 `/ping` 与 `/health`，没有任何平台调用代码 |
 | 归一化、红旗短路、引用核验 | 未写 | 这三块是后端主干，等语料和评测集有形状再动手 |
-| 登录鉴权 | 未做 | 所有接口当前放行，JWT 方案未落地 |
+| 登录鉴权 | 已做（账号域） | HS256 访问令牌 2h、刷新令牌 30 天轮换（重放 1005）；注册/登录/刷新/登出已上线，其他域按需接 `get_current_user` |
 | 小程序 appid | 未申请 | 真机调试前必须补 |
 | 测试数据库 | 已接 | `tests/conftest.py` 每个会话重建 `clear_complaint_test`（环境变量 `TEST_DATABASE_URL`，默认 `localhost:5432`）并执行 `alembic upgrade head`；CI 的 backend job 带 `services: postgres` |
 | Redis | 未接入 | 先不加依赖 |

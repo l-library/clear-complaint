@@ -8,14 +8,24 @@ import asyncio
 import os
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.pool import NullPool
+
+from app.db.session import get_session
+from app.main import app
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
@@ -57,3 +67,34 @@ def migrated_db() -> Iterator[str]:
         env={**os.environ, "DATABASE_URL": url},
     )
     yield url
+
+
+@pytest.fixture(scope="session")
+def test_engine(migrated_db: str) -> Iterator[AsyncEngine]:
+    # NullPool：连接即用即关，避免连接绑死在某个事件循环上（夹具与 TestClient 各自持有循环）
+    engine = create_async_engine(migrated_db, poolclass=NullPool)
+    yield engine
+    asyncio.run(engine.dispose())
+
+
+async def _truncate(engine: AsyncEngine) -> None:
+    async with engine.begin() as connection:
+        await connection.execute(
+            text('TRUNCATE "user", consent, refresh_token RESTART IDENTITY CASCADE')
+        )
+
+
+@pytest.fixture
+def db_client(test_engine: AsyncEngine) -> Iterator[TestClient]:
+    """带真实数据库会话的客户端，每个用例先清空账号三张表。"""
+    asyncio.run(_truncate(test_engine))
+    factory = async_sessionmaker(test_engine, expire_on_commit=False)
+
+    async def override() -> AsyncIterator[AsyncSession]:
+        async with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override
+    with TestClient(app) as client:
+        yield client
+    app.dependency_overrides.pop(get_session, None)
