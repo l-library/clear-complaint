@@ -39,10 +39,11 @@ class Settings(BaseSettings):
     # 导出包落盘目录。CI/测试不设；生产由环境变量注入
     export_dir: str = ""
 
-    # 隐私政策版本与链接：GET /api/meta/privacy 返回，注册时校验 consent_version
+    # 隐私政策版本与链接：GET /api/meta/privacy 返回，注册时校验 consent_version。
+    # 链接默认为空：没配置就不给假地址，由前端隐藏入口；真实地址经环境变量注入
     privacy_version: str = "2026-11-01"
-    privacy_policy_url: str = "https://example.com/privacy"
-    sensitive_policy_url: str = "https://example.com/privacy/sensitive"
+    privacy_policy_url: str = ""
+    sensitive_policy_url: str = ""
 
 
 @lru_cache
