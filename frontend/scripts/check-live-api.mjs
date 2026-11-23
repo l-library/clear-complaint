@@ -93,7 +93,7 @@ try {
   passed('Profile update preserves unknown versus explicitly none')
   const height = await health.saveVital({ kind: 'height', height_cm: 170, measured_at: measuredAt })
   const weight = await health.saveVital({ kind: 'weight', weight_kg: 65, measured_at: measuredAt })
-  await archive.createBloodPressure({ systolic: 120, diastolic: 80, measured_at: measuredAt })
+  await health.saveVital({ kind: 'bp', systolic: 120, diastolic: 80, measured_at: measuredAt })
   await health.saveVital({ kind: 'weight', weight_kg: 66, measured_at: measuredAt }, weight.id)
   assert.equal((await health.listVitals()).total, 3)
   assert.equal((await archive.getArchiveOverview()).vitals.latest_weight_kg, 66)

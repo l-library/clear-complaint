@@ -56,8 +56,8 @@
         <view v-if="sidebarExpanded" class="recent-conversations">
           <text class="recent-heading">最近对话</text>
           <text v-if="!recentConversations.length" class="recent-empty">从一次新的问诊开始</text>
-          <button role="button" tabindex="0" @keydown="activateButton" v-for="item in recentConversations.slice(0, 8)" :key="item.id" class="recent-conversation" :class="{ 'recent-current': item.id === activeConversation?.id }" :aria-label="`${item.type === 'follow_up' ? '随访' : '问诊'}：${item.title}`" @click="openConversation(item.id)">
-            <QIcon :name="item.type === 'follow_up' ? 'calendar' : 'chat'" /><view><text class="recent-title">{{ item.title }}</text><text class="recent-kind">{{ item.type === 'follow_up' ? '随访对话' : '症状问诊' }}</text></view>
+          <button role="button" tabindex="0" @keydown="activateButton" v-for="item in recentConversations.slice(0, 8)" :key="item.id" class="recent-conversation" :class="{ 'recent-current': item.id === activeConversation?.id }" :aria-label="`问诊：${item.title}`" @click="openConversation(item.id)">
+            <QIcon name="chat" /><view><text class="recent-title">{{ item.title }}</text><text class="recent-kind">症状问诊</text></view>
           </button>
         </view>
         <view class="sidebar-bottom">
@@ -71,7 +71,7 @@
           <view class="breadcrumb"><text class="breadcrumb-brand">清诉</text><text class="slash">/</text><text>{{ pageTitle }}</text></view>
           <view class="workspace-actions"><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="账户信息" @click="showProfile"><QIcon name="user" /></button><button role="button" tabindex="0" @keydown="activateButton" class="icon-button mobile-history-button" aria-label="最近对话" :aria-expanded="historyOpen" @click="historyOpen = !historyOpen"><QIcon name="clock" /></button><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="返回首页" @click="goHome"><QIcon name="home" /></button></view>
         </view>
-        <view v-if="historyOpen" class="history-menu"><text class="recent-heading">最近对话</text><button role="button" tabindex="0" @keydown="activateButton" v-for="item in recentConversations" :key="item.id" class="recent-conversation" @click="openConversation(item.id); historyOpen = false"><QIcon :name="item.type === 'follow_up' ? 'calendar' : 'chat'" /><view><text class="recent-title">{{ item.title }}</text><text class="recent-kind">{{ item.type === 'follow_up' ? '随访' : '问诊' }}</text></view></button><button role="button" tabindex="0" @keydown="activateButton" class="history-new" @click="requestNewConversation(); historyOpen = false">＋ 新建问诊</button></view>
+        <view v-if="historyOpen" class="history-menu"><text class="recent-heading">最近对话</text><button role="button" tabindex="0" @keydown="activateButton" v-for="item in recentConversations" :key="item.id" class="recent-conversation" @click="openConversation(item.id); historyOpen = false"><QIcon name="chat" /><view><text class="recent-title">{{ item.title }}</text><text class="recent-kind">问诊</text></view></button><button role="button" tabindex="0" @keydown="activateButton" class="history-new" @click="requestNewConversation(); historyOpen = false">＋ 新建问诊</button></view>
         <view class="workspace-content">
           <view v-show="activeTab === 'archive'" class="workspace-pane"><QHealthArchive @open-conversation="openConversation" /></view>
           <view v-show="activeTab === 'plans'" class="workspace-pane"><QHealthPlans @open-followup="openFollowUp" @open-archive="navigate('archive')" /></view>
@@ -134,12 +134,11 @@ import QHealthPlans from '@/components/QLivePlans.vue'
 import QAccountPanel from '@/components/QAccountPanel.vue'
 import QConsultationFlow from '@/components/QConsultationFlow.vue'
 import QMessageTransition from '@/components/QMessageTransition.vue'
-import { useLiveWorkspaceStore } from '@/stores/liveWorkspace'
-import type { WorkspaceTab } from '@/types/consultation'
+import { useLiveWorkspaceStore, type WorkspaceTab } from '@/stores/liveWorkspace'
 import type { ReminderItem } from '@/api/archive'
 
 const store = useLiveWorkspaceStore()
-const { screen, activeTab, draft, messages, pending, error, saved, activeConversation, recentConversations, selectedRecordId } = storeToRefs(store)
+const { screen, activeTab, draft, messages, pending, error, saved, activeConversation, recentConversations } = storeToRefs(store)
 const menuOpen = ref(false)
 const sidebarExpanded = ref(false)
 const entryComposer = ref<InstanceType<typeof QComposer> | null>(null)
@@ -217,15 +216,12 @@ function navigate(tab: WorkspaceTab) {
     ? `?reminder_id=${store.followUpReminder.id}&date=${store.followUpReminder.due_at.slice(0, 10)}`
     : tab === 'chat' && activeConversation.value
     ? `?conversation_id=${encodeURIComponent(activeConversation.value.id)}`
-    : tab === 'archive' && selectedRecordId.value
-      ? `?record_id=${encodeURIComponent(selectedRecordId.value)}`
-      : tab === 'plans' ? `?tab=${store.selectedPlanTab}` : ''
+    : tab === 'plans' ? `?tab=${store.selectedPlanTab}` : ''
   const pages = getCurrentPages()
   const page = pages[pages.length - 1] as unknown as { route?: string; options?: Record<string, string> } | undefined
   const sameContext = tab === 'chat'
     ? store.followUpReminder ? page?.options?.reminder_id === String(store.followUpReminder.id) : (page?.options?.conversation_id || '') === (activeConversation.value?.id || '')
-    : tab === 'archive' ? (page?.options?.record_id || '') === selectedRecordId.value
-      : (page?.options?.tab || 'all') === store.selectedPlanTab
+    : tab === 'archive' || (page?.options?.tab || 'all') === store.selectedPlanTab
   if (!navigating && (page?.route !== path || !sameContext)) {
     navigating = true
     uni.redirectTo({ url: `/${path}${query}`, complete: () => { navigating = false } })
@@ -287,7 +283,6 @@ onMounted(() => { void store.initialize() })
 
 watch(draft, () => { if (draft.value.trim()) error.value = '' })
 watch(activeTab, (tab) => { if (screen.value === 'workspace' && !transferring.value) navigate(tab) })
-watch(selectedRecordId, () => { if (screen.value === 'workspace' && activeTab.value === 'archive') navigate('archive') })
 watch(() => activeConversation.value?.id, () => { if (screen.value === 'workspace' && activeTab.value === 'chat' && !transferring.value && !store.followUpReminder) navigate('chat') })
 watch([messageCount, pending, activeTab, () => activeConversation.value?.id], async () => {
   await nextTick()
@@ -379,13 +374,10 @@ watch([messageCount, pending, activeTab, () => activeConversation.value?.id], as
 .workspace-header { display: flex; align-items: center; justify-content: space-between; gap: 15px; height: 76px; padding: 0 4vw; border-bottom: 1px solid var(--line); }
 .breadcrumb { display: flex; align-items: center; gap: 12px; min-width: 0; font-size: 14px; }
 .breadcrumb-brand { font-weight: 600; }
-.slash, .demo-tag { color: var(--muted); }
+.slash { color: var(--muted); }
 .workspace-actions { display: flex; align-items: center; gap: 14px; }
-.demo-tag { font-size: 11px; }
 .mobile-history-button, .mobile-nav, .chat-mobile-toolbar { display: none; }
 .workspace-pane { animation: reveal .28s ease both; }
-.storage-notice { position: relative; z-index: 10; margin: 15px 4vw; padding: 12px 16px; display: flex; align-items: center; gap: 15px; border: 1px solid #ead6bc; border-radius: 10px; background: #fff8ef; font-size: 13px; }
-.storage-notice button { padding: 6px 10px; flex-shrink: 0; background: #fff; color: var(--accent); font-size: 12px; line-height: 1.5; }
 .history-menu { position: absolute; right: 20px; top: 65px; z-index: 20; width: 270px; max-height: 55vh; overflow: auto; padding: 13px; border: 1px solid var(--line); border-radius: 16px; background: #fff; box-shadow: 0 12px 32px #1b1b1810; }
 .history-new { padding: 10px; font-size: 13px; color: var(--accent); background: var(--surface-tint); }
 .empty-chat { box-sizing: border-box; min-height: 100vh; min-height: 100dvh; padding: 19.95vh 24px 80px; text-align: center; }
@@ -450,14 +442,11 @@ watch([messageCount, pending, activeTab, () => activeConversation.value?.id], as
   box-shadow: 0 12px 32px rgba(80, 108, 146, .13), 0 2px 6px rgba(80, 108, 146, .04), inset 0 1px 0 #fff;
   animation: reveal .4s .1s ease both;
 }
-.review-tabs { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 16px 18px 8px; background: rgba(250, 253, 248, .72); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
-.review-tabs button { margin: 0; padding: 9px 13px; border: 1px solid transparent; border-radius: 24px; background: transparent; color: #657064; font-size: 13px; line-height: 1.5; }
-.review-tabs .active { border-color: var(--glass-stroke); background: rgba(255, 255, 255, .62); color: #39433e; font-weight: 500; box-shadow: 0 2px 8px rgba(79, 104, 95, .04), inset 0 1px 0 #fff; }
 .account-overlay { position: fixed; z-index: 100; inset: 0; display: flex; justify-content: flex-end; padding: 24px; box-sizing: border-box; background: rgba(27, 33, 28, .13); }
 .account-dialog { width: min(430px, 100%); height: 100%; align-self: stretch; }
 .account-close { position: sticky; z-index: 5; top: 8px; margin: 8px 8px 0 auto; width: 40px; height: 40px; }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .context-column, .review-tabs { --glass-surface: #fff; --glass-stroke: #dce3dc; --glass-rule: #dce3dc; background: #f8fbf5; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .context-column { --glass-surface: #fff; --glass-stroke: #dce3dc; --glass-rule: #dce3dc; background: #f8fbf5; -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 .follow-up-context { display: flex; gap: 12px; padding: 15px; margin-bottom: 25px; border: 1px solid var(--line); border-radius: 14px; background: #fff; font-size: 13px; line-height: 1.7; }
 .follow-up-context > view { min-width: 0; }
@@ -472,8 +461,6 @@ button:active { transform: scale(.97); }
 @keyframes pulse { 0%, 70%, 100% { opacity: .3; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-3px); } }
 @media (max-width: 1100px) {
   .conversation-layout { grid-template-columns: minmax(0, 1fr) 290px; gap: 24px; padding-left: 28px; padding-right: 18px; }
-  .review-tabs { gap: 4px; padding: 14px 14px 7px; }
-  .review-tabs button { font-size: 13px; }
   .conversation-tools > text { max-width: 50%; }
 }
 @media (max-width: 820px) {
@@ -515,7 +502,6 @@ button:active { transform: scale(.97); }
   .mobile-home image { width: 28px; height: 24px; }
   .workspace-main { width: 100%; margin-left: 0; padding-bottom: calc(67px + env(safe-area-inset-bottom)); }
   .workspace-header { height: 68px; padding: 0 20px; }
-  .demo-tag { display: none; }
   .mobile-history-button { display: flex; }
   .empty-chat { min-height: calc(100dvh - 127px); padding: 8vh 20px 55px; }
   .welcome-title { margin-top: 20px; max-width: 330px; font-size: 34px; letter-spacing: -.8px; }
@@ -538,6 +524,5 @@ button:active { transform: scale(.97); }
   .conversation-tools { font-size: 10px; }
   .save-button { font-size: 12px; }
   .context-column { max-height: none; }
-  .storage-notice { margin: 12px 20px; flex-wrap: wrap; }
 }
 </style>

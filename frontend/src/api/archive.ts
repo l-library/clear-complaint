@@ -1,6 +1,5 @@
 import { request } from '@/request'
 import type { Profile } from '@/api/profile'
-import { saveVital } from '@/api/health'
 
 export interface BloodPressure {
   measured_at: string
@@ -83,15 +82,6 @@ export function getArchiveTrend(days = 90, limit = 10): Promise<ArchiveTrend> {
 
 export function getReminders(date?: string): Promise<ReminderResponse> {
   return request(`/reminders${date ? `?date=${encodeURIComponent(date)}` : ''}`, { auth: true })
-}
-
-export function createBloodPressure(payload: {
-  measured_at: string
-  systolic: number
-  diastolic: number
-  pulse?: number
-}): Promise<VitalRecord> {
-  return saveVital({ kind: 'bp', ...payload })
 }
 
 export function respondReminder(
