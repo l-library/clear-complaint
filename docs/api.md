@@ -352,10 +352,10 @@
 
 ### 3.3 `GET /api/meta/privacy`
 
-返回当前隐私政策版本与链接，无需鉴权。注册前用它取 `consent_version`。
+返回当前隐私政策版本与链接，无需鉴权。注册前用它取 `consent_version`。链接为空表示尚未配置政策页面，前端应隐藏对应入口，不得展示占位地址。
 
 ```json
-{ "current_version": "2026-11-01", "policy_url": "https://example.com/privacy", "sensitive_policy_url": "https://example.com/privacy/sensitive" }
+{ "current_version": "2026-11-01", "policy_url": "", "sensitive_policy_url": "" }
 ```
 
 ## 4. 认证
