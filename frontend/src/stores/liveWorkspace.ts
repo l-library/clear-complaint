@@ -35,6 +35,7 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
   const selectedPlanTab = ref<'all' | 'follow_up' | 'medication'>('all')
   const saveReminder = ref(true)
   const recheckDate = ref('')
+  const saveNotice = ref('')
   const followUpReminder = ref<ReminderItem | null>(null)
   const followUpAnswers = ref({ relieved: '', visited: '', new_symptom: '' })
   const followUpNote = ref('')
@@ -53,7 +54,7 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
   function newConversation() {
     generation += 1; pending.value = false; messages.value = []; detail.value = null; episodeId.value = null
     questions.value = []; answers.value = {}; error.value = ''; stage.value = ''; lastRequest = null
-    saveReminder.value = true; recheckDate.value = ''
+    saveReminder.value = true; recheckDate.value = ''; saveNotice.value = ''
     followUpReminder.value = null; followUpResponse.value = null; followUpNote.value = ''
     followUpAnswers.value = { relieved: '', visited: '', new_symptom: '' }
     openWorkspace()
@@ -108,11 +109,12 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
     if (!Number.isSafeInteger(numeric) || numeric <= 0) return false
     if (episodeId.value === numeric) { openWorkspace(); return true }
     const run = ++generation
-    pending.value = true; error.value = ''
+    pending.value = true; error.value = ''; saveNotice.value = ''
     try {
       const value = await getEpisode(numeric)
       if (run !== generation) return false
       followUpReminder.value = null; followUpResponse.value = null
+      saveReminder.value = true; recheckDate.value = ''
       messages.value = []; addMessage('user', value.episode.complaint_text)
       applyDetail(value); openWorkspace()
       return true
@@ -189,10 +191,11 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
     if (!episodeId.value || !result.value || pending.value) return
     const run = generation
     const id = episodeId.value
-    pending.value = true; error.value = ''
+    pending.value = true; error.value = ''; saveNotice.value = ''
     try {
-      await saveEpisode(id, reminder, recheckDate)
+      const response = await saveEpisode(id, reminder, recheckDate)
       if (run !== generation) return
+      saveNotice.value = response.reminder ? `提醒已安排于 ${response.reminder.due_at}；已有待处理提醒会保留原时间。` : '问诊已归档。'
       const value = await getEpisode(id)
       if (run === generation) { applyDetail(value); await loadHistory() }
     } catch (cause) { if (run === generation) error.value = message(cause) }
@@ -220,7 +223,7 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
   watch(() => auth.user?.id, () => { reset(); if (auth.isLoggedIn) void initialize() })
   return { auth, screen, activeTab, draft, messages, pending, error, stage, patientProfile, detail, result, episodeId,
     questions, answers, saved, profile, activeConversation, recentConversations, history, historyTotal, historyPage,
-    accountOpen, initialized, readyToSend, selectedPlanTab, saveReminder, recheckDate,
+    accountOpen, initialized, readyToSend, selectedPlanTab, saveReminder, recheckDate, saveNotice,
     followUpReminder, followUpAnswers, followUpNote, followUpResponse, startFollowUp, submitFollowUp,
     initialize, loadHistory, openWorkspace, newConversation, openConversation, sendMessage, submitAnswers, skipClarify, retry, saveConversation, reset }
 })

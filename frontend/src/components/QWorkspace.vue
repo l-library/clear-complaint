@@ -109,7 +109,14 @@
                 <text class="medical-note">健康信息整理，不构成诊断。</text>
               </view>
             </view>
-            <view v-if="!store.accountOpen" class="context-column"><QAccountPanel /></view>
+            <view v-if="!store.accountOpen" class="context-column">
+              <view class="context-tabs" role="tablist" aria-label="问诊侧栏">
+                <button role="tab" tabindex="0" @keydown="activateButton" :aria-selected="contextTab === 'review'" :class="{ selected: contextTab === 'review' }" @click="contextTab = 'review'">纠偏与评估</button>
+                <button role="tab" tabindex="0" @keydown="activateButton" :aria-selected="contextTab === 'account'" :class="{ selected: contextTab === 'account' }" @click="contextTab = 'account'">账户信息</button>
+              </view>
+              <QEpisodeReview v-if="contextTab === 'review'" :detail="store.detail" :pending="pending" />
+              <QAccountPanel v-else />
+            </view>
           </view>
         </view>
       </view>
@@ -132,6 +139,7 @@ import QComposer from '@/components/QComposer.vue'
 import QHealthArchive from '@/components/QLiveArchive.vue'
 import QHealthPlans from '@/components/QLivePlans.vue'
 import QAccountPanel from '@/components/QAccountPanel.vue'
+import QEpisodeReview from '@/components/QEpisodeReview.vue'
 import QConsultationFlow from '@/components/QConsultationFlow.vue'
 import QMessageTransition from '@/components/QMessageTransition.vue'
 import { useLiveWorkspaceStore, type WorkspaceTab } from '@/stores/liveWorkspace'
@@ -144,6 +152,7 @@ const sidebarExpanded = ref(false)
 const entryComposer = ref<InstanceType<typeof QComposer> | null>(null)
 const replyComposer = ref<InstanceType<typeof QComposer> | null>(null)
 const historyOpen = ref(false)
+const contextTab = ref<'review' | 'account'>('review')
 const messageScrollTop = ref(0)
 const messageCount = computed(() => messages.value.length)
 const isFollowUp = computed(() => Boolean(store.followUpReminder))
@@ -443,6 +452,9 @@ watch([messageCount, pending, activeTab, () => activeConversation.value?.id], as
   animation: reveal .4s .1s ease both;
 }
 .account-overlay { position: fixed; z-index: 100; inset: 0; display: flex; justify-content: flex-end; padding: 24px; box-sizing: border-box; background: rgba(27, 33, 28, .13); }
+.context-tabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 8px; padding: 17px 18px 9px; background: rgba(250,253,248,.85); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.context-tabs button { margin: 0; padding: 9px 13px; min-height: 44px; border-radius: 24px; background: transparent; color: #586458; font-size: 13px; line-height: 1.5; }
+.context-tabs .selected { background: rgba(255,255,255,.8); color: #293c31; box-shadow: inset 0 1px 0 #fff; }
 .account-dialog { width: min(430px, 100%); height: 100%; align-self: stretch; }
 .account-close { position: sticky; z-index: 5; top: 8px; margin: 8px 8px 0 auto; width: 40px; height: 40px; }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {

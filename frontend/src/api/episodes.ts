@@ -38,7 +38,16 @@ export interface QuestionField {
 
 export interface EpisodeDetail {
   disclaimer: string
-  gate?: { degraded?: boolean; fallback?: boolean }
+  normalized?: Record<string, string | string[] | null>
+  self_attribution?: string | null
+  gate?: {
+    red_flags?: Array<{ rule_id: string; name: string }>
+    citations_verified?: number
+    citations_dropped?: number
+    clarify_rounds?: number
+    degraded?: boolean
+    fallback?: boolean
+  } | null
   episode: {
     id: number
     status: string
@@ -84,8 +93,8 @@ export interface PageResult<T> {
   size: number
 }
 
-export function listEpisodes(status?: string, page = 1): Promise<PageResult<EpisodeSummary>> {
-  const query = `?page=${page}&size=20${status ? `&status=${encodeURIComponent(status)}` : ''}`
+export function listEpisodes(status?: string, page = 1, triage?: string): Promise<PageResult<EpisodeSummary>> {
+  const query = `?page=${page}&size=20${status ? `&status=${encodeURIComponent(status)}` : ''}${triage ? `&triage=${encodeURIComponent(triage)}` : ''}`
   return request(`/episodes${query}`, { auth: true })
 }
 

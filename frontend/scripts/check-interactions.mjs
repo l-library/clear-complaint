@@ -23,7 +23,7 @@ function loader(overrides = {}, globals = {}) {
     if (name === 'vue') return vue
     if (name === 'pinia') return pinia
     if (!name.startsWith('@/')) return require(name)
-    if (name.endsWith('.vue') && name !== '@/components/QWorkspace.vue') return {}
+    if (name.endsWith('.vue') && !['QWorkspace', 'QLiveArchive', 'QEpisodeReview', 'QConsultationFlow'].some((component) => name === `@/components/${component}.vue`)) return {}
     if (cache.has(name)) return cache.get(name)
     let url = new URL(name.slice(2) + (name.endsWith('.vue') ? '' : '.ts'), src)
     if (!existsSync(url)) url = new URL(name.slice(2) + '/index.ts', src)
@@ -36,6 +36,17 @@ function loader(overrides = {}, globals = {}) {
     return result
   }
   return load
+}
+
+async function renderComponent(name, props = {}, overrides = {}) {
+  const descriptor = parse(readFileSync(new URL(`components/${name}.vue`, src), 'utf8')).descriptor
+  const script = compileScript(descriptor, { id: 'live-render-test', inlineTemplate: true, templateOptions: { compilerOptions: { isCustomElement: (tag) => /^[a-z]/.test(tag) } } }).content
+  const compiled = ts.transpileModule(h5(script), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
+  const result = {}
+  vm.runInNewContext(compiled, { exports: result, require: loader({ '@/components/QIcon.vue': { default: { render: () => null } }, ...overrides }), Date })
+  const app = vue.createSSRApp(result.default, props)
+  for (const tag of ['picker', 'checkbox', 'checkbox-group']) app.component(tag, { setup: (_, { slots }) => () => vue.h(tag, slots.default?.()) })
+  return require('@vue/server-renderer').renderToString(app)
 }
 
 // Synthetic transport fixtures are used only here, never in the running app.
@@ -86,6 +97,16 @@ network = () => { callsWithoutToken += 1 }
 await assert.rejects(api.request('/profile', { auth: true }), /请先登录/)
 assert.equal(callsWithoutToken, 0)
 
+const filterCalls = []
+const filteredApi = loader({ '@/request': { request: async (path, options) => { filterCalls.push({ path, options }); return {} } } })
+await filteredApi('@/api/episodes').listEpisodes('ready,saved', 2, 'clinic')
+await filteredApi('@/api/health').listVitals(3, 'bp')
+await filteredApi('@/api/medications').getMedications('long_term', 'stopped')
+await filteredApi('@/api/archive').getArchiveTrend(30, 50)
+await filteredApi('@/api/medications').updateMedication(8, { status: 'active' })
+assert.deepEqual(filterCalls.map((item) => item.path), ['/episodes?page=2&size=20&status=ready%2Csaved&triage=clinic', '/vitals?page=3&size=20&kind=bp', '/medications?kind=long_term&status=stopped', '/archive/trend?days=30&limit=50', '/medications/8'])
+assert.equal(filterCalls[4].options.data.status, 'active')
+
 const parseModule = loadRequest('@/request/sseParser')
 const events = []
 const parser = parseModule.createSseParser((event) => events.push(event))
@@ -115,7 +136,7 @@ function setup(route = 'pages/index/index') {
       event({ event: 'done', data: { episode_id: 71 } })
     },
     getEpisode: () => delayedDetail ? new Promise((resolve) => { detailResolver = resolve }) : Promise.resolve(clone(detail)),
-    saveEpisode: async (...args) => { saves.push(args) },
+    saveEpisode: async (...args) => { saves.push(args); return { saved_at: '2026-11-22 10:00:00', reminder: args[1] ? { id: 91, kind: 'recheck', due_at: '2026-11-25 09:00:00' } : null } },
     clarifyEpisodeStream: async () => {}, skipClarifyStream: async () => {}, retryEpisodeStream: async () => {},
   }
   const uni = {
@@ -154,8 +175,80 @@ for (const route of ['pages/index/index', 'pages/chat/index']) {
   assert.equal(app.store.messages.length, 1, 'No canned assistant messages may appear')
   await app.store.saveConversation(false, '2026-11-25')
   assert.deepEqual(app.saves[0], [71, false, '2026-11-25'])
+  app.store.detail.episode.saved_at = '2026-11-22 10:00:00'
+  await app.store.saveConversation(true, '2026-11-26')
+  assert.deepEqual(app.saves[1], [71, true, '2026-11-26'], 'An archived episode must still allow a reminder request')
+  assert.match(app.store.saveNotice, /2026-11-25 09:00:00/)
   app.stop()
 }
+
+const archiveAuth = vue.reactive({ user: { id: 8 }, isLoggedIn: true })
+const archiveWorkspace = vue.reactive({ auth: archiveAuth, activeTab: 'archive', history: [{ id: 900 }], historyTotal: 1 })
+const archiveCalls = [], statusChanges = []
+let releasePage, deferPage = false
+const archiveModules = loader({
+  vue: { ...vue, onMounted() {} },
+  '@/stores/liveWorkspace': { useLiveWorkspaceStore: () => archiveWorkspace },
+  '@/api/archive': { getArchiveOverview: async () => ({}), getArchiveTrend: async (...args) => { archiveCalls.push(['trend', ...args]); return {} } },
+  '@/api/episodes': { listEpisodes: async (...args) => { archiveCalls.push(['episodes', ...args]); const result = { records: [{ id: args[1] }], total: 50 }; return deferPage ? new Promise((resolve) => { releasePage = () => resolve(result) }) : result } },
+  '@/api/health': { listVitals: async (...args) => { archiveCalls.push(['vitals', ...args]); return { records: [], total: 50 } } },
+  '@/api/medications': { getMedications: async (...args) => { archiveCalls.push(['medications', ...args]); return { records: [] } }, updateMedication: async (...args) => statusChanges.push(args) },
+}, { uni: { showModal(options) { options.success({ confirm: true }) } } })
+const archiveScope = vue.effectScope()
+const archive = archiveScope.run(() => archiveModules('@/components/QLiveArchive.vue').default.setup({}, { expose() {} }))
+archive.episodeStatusIndex.value = 4; archive.triageIndex.value = 2; archive.vitalFilterIndex.value = 1
+archive.medicationKindIndex.value = 1; archive.medicationStatusIndex.value = 2; archive.trendDayIndex.value = 1; archive.trendLimitIndex.value = 2
+await archive.load()
+assert.deepEqual(archiveCalls.slice(-4).map((item) => Array.from(item)), [['episodes', 'saved', 1, 'clinic'], ['vitals', 1, 'bp'], ['medications', 'long_term', 'stopped'], ['trend', 30, 50]])
+await archive.moreEpisodes()
+assert.deepEqual(archiveCalls.at(-1), ['episodes', 'saved', 2, 'clinic'])
+assert.equal(archive.episodes.value.length, 2)
+assert.equal(archiveWorkspace.history[0].id, 900, 'Archive filters must not replace sidebar history')
+await archive.moreVitals()
+assert.deepEqual(archiveCalls.at(-1), ['vitals', 2, 'bp'])
+archive.restoreMedication({ id: 8, status: 'stopped' })
+await settle()
+assert.equal(statusChanges[0][0], 8)
+assert.equal(statusChanges[0][1].status, 'active')
+deferPage = true
+const stalePage = archive.moreEpisodes()
+archiveAuth.user = null; archiveAuth.isLoggedIn = false
+await settle()
+releasePage()
+await stalePage
+assert.equal(archive.episodes.value.length, 0, 'A page response after logout must not restore health records')
+archiveScope.stop()
+
+const reviewProps = vue.reactive({ detail: { ...clone(detail), normalized: { symptom: ['SYNTHETIC SYMPTOM'], duration_text: 'unknown' }, self_attribution: 'SYNTHETIC ATTRIBUTION', gate: { red_flags: [{ rule_id: 'SYNTHETIC', name: 'SYNTHETIC FLAG' }], citations_verified: 0, citations_dropped: 2, clarify_rounds: 1 } }, pending: false })
+const review = loader()('@/components/QEpisodeReview.vue').default.setup(reviewProps, { expose() {} })
+assert.equal(review.fields.value[0].value, 'SYNTHETIC SYMPTOM')
+assert.equal(review.fields.value[1].value, '本人暂不确定')
+assert.equal(review.gate.value.citations_verified, 0)
+assert.equal(review.gate.value.citations_dropped, 2)
+assert.equal(review.gate.value.red_flags[0].name, 'SYNTHETIC FLAG')
+const reviewHtml = await renderComponent('QEpisodeReview', reviewProps)
+assert.match(reviewHtml, /SYNTHETIC ATTRIBUTION/)
+assert.match(reviewHtml, /SYNTHETIC FLAG/)
+assert.match(reviewHtml, /本人暂不确定/)
+assert.match(reviewHtml, /约束详情、纠偏评分与前后效果对比待接入/)
+reviewProps.detail = null
+assert.equal(review.fields.value.length, 0)
+assert.equal(review.hasGate.value, false)
+
+const rangeWorkspace = vue.reactive({ detail: clone(detail) })
+const rangeComponent = loader({ '@/stores/liveWorkspace': { useLiveWorkspaceStore: () => rangeWorkspace } })('@/components/QConsultationFlow.vue').default.setup({}, { expose() {} })
+assert.equal(rangeComponent.recheckRange.value.start, '2026-11-25')
+assert.equal(rangeComponent.recheckRange.value.end, '2026-12-06')
+const renderedWorkspace = { detail: clone(detail), result: clone(detail.result), questions: [], saved: true, pending: false, recheckDate: '', saveNotice: '', followUpReminder: null }
+const renderFlow = () => renderComponent('QConsultationFlow', {}, { '@/stores/liveWorkspace': { useLiveWorkspaceStore: () => renderedWorkspace } })
+assert.match(await renderFlow(), /补建就诊提醒/)
+renderedWorkspace.result.triage = 'emergency'
+assert.doesNotMatch(await renderFlow(), /补建就诊提醒|补建随访提醒/)
+renderedWorkspace.result = null
+renderedWorkspace.followUpReminder = { title: 'SYNTHETIC FOLLOWUP', status: 'done' }
+renderedWorkspace.followUpResponse = { advice: { text: 'SYNTHETIC ADVICE' }, supplement: { prepare_idx: [0, 2], watch_for: [], next_question: '' } }
+assert.match(await renderFlow(), /2 项原问诊准备事项/)
+assert.match(await renderFlow(), /查看问诊记录/)
 const failed = setup()
 await failed.store.initialize()
 failed.setFail(true)
@@ -200,4 +293,4 @@ for (const key of ['Enter', ' ', 'Tab']) keyboard.activateButton({ key, currentT
 control.disabled = true
 keyboard.activateButton({ key: 'Enter', currentTarget: control, preventDefault() {} })
 assert.equal(control.clicks, 2)
-console.log('Live interaction checks passed: authenticated requests, refresh rotation, no offline fixtures, UTF-8/SSE framing, message flight, stable retry keys and logout isolation.')
+console.log('Live interaction checks passed: authentication, SSE, message flight, retries, archive filters and pagination, reminder requests, medication status, review data and logout isolation.')

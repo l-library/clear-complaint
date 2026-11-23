@@ -35,7 +35,8 @@ const filteredReminders = computed(() => reminders.value.filter((item) => worksp
 let loadVersion = 0
 async function load() { if (!auth.isLoggedIn) return; const owner = auth.user?.id, version = ++loadVersion; loading.value = true; error.value = ''; try { const [items, plans, medicines] = await Promise.all([getReminders(day.value), listSchedules(), getMedications()]); if (owner !== auth.user?.id || version !== loadVersion) return; reminders.value = [...items.groups.medication, ...items.groups.followup, ...items.groups.recheck]; schedules.value = plans.records; medications.value = medicines.records } catch (cause) { if (owner === auth.user?.id && version === loadVersion) error.value = cause instanceof Error ? cause.message : '读取失败，请重试。' } finally { if (version === loadVersion) loading.value = false } }
 async function perform(action: () => Promise<void>) { if (busy.value) return; busy.value = true; error.value = ''; try { await action(); await load() } catch (cause) { error.value = cause instanceof Error ? cause.message : '操作失败，请重试。' } finally { busy.value = false } }
-onMounted(load)
+onMounted(() => { if (workspace.activeTab === 'plans') void load() })
+watch(() => workspace.activeTab, (tab) => { if (tab === 'plans') void load() })
 watch(() => auth.user?.id, () => { reminders.value = []; schedules.value = []; medications.value = []; scheduleOpen.value = false; void load() })
 function newSchedule() { scheduleId.value = undefined; Object.assign(form, { medication_id: medications.value.find((item) => item.status === 'active')?.id || 0, times: '', started_on: today, ended_on: '', note: '' }); scheduleOpen.value = true }
 function editSchedule(item: MedicationSchedule) { scheduleId.value = item.id; Object.assign(form, { ...item, times: item.times.join(','), ended_on: item.ended_on || '', note: item.note || '' }); scheduleOpen.value = true }
