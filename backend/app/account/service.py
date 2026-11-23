@@ -402,20 +402,23 @@ def _validate_update(payload: ProfileUpdate, fields: set[str]) -> dict[str, obje
     if {"city_code", "city_name"} & fields:
         # 城市成对提交或成对清空，只提交一边按参数错误处理
         if {"city_code", "city_name"} - fields:
-            raise BizException(ErrorCode.INVALID_PARAM, "city_code 与 city_name 须同时提交")
-        code, city = payload.city_code, payload.city_name
+            raise BizException(ErrorCode.INVALID_PARAM, "城市代码与城市名称须同时提交")
+        # 前端表单会把留空的城市发成空串；空串按未填处理，不能把用户挡在保存上
+        code, city = payload.city_code or None, payload.city_name or None
         if code is None and city is None:
             values["city_code"] = None
             values["city_name"] = None
         elif code is not None and city is not None:
             if len(code) != 6 or not code.isdigit():
-                raise BizException(ErrorCode.INVALID_PARAM, "city_code 须为 6 位行政区划码")
+                raise BizException(
+                    ErrorCode.INVALID_PARAM, "城市代码须为 6 位行政区划码，如 110100（北京市）"
+                )
             if not city or len(city) > 40:
-                raise BizException(ErrorCode.INVALID_PARAM, "city_name 须为 1 到 40 字")
+                raise BizException(ErrorCode.INVALID_PARAM, "城市名称须为 1 到 40 字")
             values["city_code"] = code
             values["city_name"] = city
         else:
-            raise BizException(ErrorCode.INVALID_PARAM, "city_code 与 city_name 须成对提交")
+            raise BizException(ErrorCode.INVALID_PARAM, "城市代码与城市名称须同时填写，或同时留空")
     if "conditions" in fields:
         values["conditions"] = _check_terms(payload.conditions, "conditions")
     if "condition_note" in fields:
