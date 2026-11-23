@@ -33,6 +33,7 @@
 │   ├── src/request/                H5 与小程序共用的请求封装
 │   ├── src/pages.json              路由、tabBar、分包
 │   ├── src/manifest.json           微信 appid 等分端配置
+│   ├── scripts/                    Node 校验脚本：check:interactions（进 CI）、check:live（手动）
 │   ├── vite.config.ts              H5 开发时的 /api 代理（指向 8000）
 │   └── pnpm-workspace.yaml         pnpm 12 的全部设置：依赖构建白名单与 nodeLinker
 ├── experiment/                     阶段一研究工件：独立 uv 项目，不 import 后端
@@ -45,6 +46,7 @@
 │   └── handoff/                    约束规格书与冻结样本，阶段二验收用
 ├── docs/                           PLAN.md、stage1.md、赛题调研.md，以后放材料与实验数据
 ├── docker-compose.yml              本地 Postgres 16
+├── start-local.ps1                 Windows 辅助脚本：Docker、Postgres、后端、H5（见第 2 节）
 ├── .github/                        CI 与 issue 模板
 ├── .editorconfig                   编辑格式规则（机器强制）
 ├── .gitattributes                  换行规则（机器强制）
@@ -66,12 +68,14 @@
 - Node 26 + pnpm 12。pnpm 12 只从 `frontend/pnpm-workspace.yaml` 读设置，不再读 `.npmrc`。其中两项都不能删：`allowBuilds` 放行依赖的 postinstall（否则 `pnpm install` 报 `ERR_PNPM_IGNORED_BUILDS`），`nodeLinker: hoisted` 换成扁平 node_modules（isolated 布局下 uni-app 的 rollup 解析不到 pinia 的传递依赖，`pnpm build:h5` 会失败）。
 - Docker 与 Docker Compose，Postgres 只跑在容器里。Docker daemon 必须已经启动（`docker info` 能通），否则 compose 命令会直接失败。
 - 应用进程不进容器：后端用 uvicorn，前端用 Vite dev server。理由见第 8 节。
+- `start-local.ps1` 是 Windows 专用的一键启动脚本，命令见下表。它需要 `backend/.env`，保留现有数据库数据，H5 起在 5175（不是 `pnpm dev:h5` 的 5173），日志写到被 Git 忽略的 `.tools/runtime/`，不会停止不是它启动的进程。
 
 | 命令 | 作用 |
 | --- | --- |
 | `docker compose up -d` | 启动 Postgres（5432），数据在命名卷 `clear-complaint-db-data` |
 | `docker compose logs -f db` | 看数据库日志 |
 | `docker compose down` / `down -v` | 停止，后者连数据一起删 |
+| `./start-local.ps1` | 仅 Windows：启动 Docker、Postgres、后端与 H5 开发服务器（5175） |
 | `cd backend && uv sync` | 安装依赖并准备虚拟环境 |
 | `cd backend && uv run uvicorn app.main:app --reload` | 启动后端，8000，接口前缀 `/api` |
 | `cd backend && uv run pytest` | 后端测试（需要 docker 里的 Postgres） |
@@ -81,10 +85,12 @@
 | `cd frontend && pnpm dev:h5` | H5 开发服务器，5173，`/api` 已代理到 8000 |
 | `cd frontend && pnpm dev:mp-weixin` | 小程序产物，用微信开发者工具打开 `dist/dev/mp-weixin` |
 | `cd frontend && pnpm type-check` | vue-tsc 类型检查 |
+| `cd frontend && pnpm check:interactions` | 离线校验鉴权、刷新、SSE 解析与对话流程，CI 会跑 |
+| `cd frontend && pnpm check:live` | 针对本机运行中的服务做端到端联调，使用临时合成账号 |
 | `cd frontend && pnpm build:h5` | 前端最小验证，提交前跟 type-check 一起跑 |
 | `cd frontend && pnpm build:mp-weixin` | 小程序生产构建，产物在 `dist/build/mp-weixin` |
 
-提交前后端跑 `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`，前端跑 `pnpm type-check && pnpm build:h5`，另外用 `git diff --check` 自查空白与换行问题。
+提交前后端跑 `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`，前端跑 `pnpm type-check && pnpm check:interactions && pnpm build:h5`，另外用 `git diff --check` 自查空白与换行问题。
 
 ## 3. Git 协作规范
 
@@ -116,9 +122,9 @@ Closes #34.
 - 标题沿用 Conventional Commit 格式；描述至少写清：**动机（为什么）**、**改动内容**、**验证方式**（跑了哪些命令、手测了什么）。UI 改动附截图或录屏。
 - 合并前要求：
   - GitHub 规则集要求 PR，且 `backend` 与 `frontend` 两个 check 必须通过。approve 数量当前设为 0，可以自己合自己的 PR；想强制 review 就改规则集，别只改这份文档；
-  - 后端改动跑过 `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`，前端改动跑过 `pnpm type-check && pnpm build:h5`；
+  - 后端改动跑过 `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`，前端改动跑过 `pnpm type-check && pnpm check:interactions && pnpm build:h5`；
   - 涉及表结构的改动，从空库重放一遍迁移（`docker compose down -v && docker compose up -d` 后 `uv run alembic upgrade head`）；
-  - CI（`.github/workflows/ci.yml`）两个 job 全绿：`backend` 跑 lint、format check、mypy、pytest，`frontend` 跑 `pnpm install --frozen-lockfile`、`type-check`、`build:h5`、`build:mp-weixin`。
+  - CI（`.github/workflows/ci.yml`）两个 job 全绿：`backend` 跑 lint、format check、mypy、pytest，`frontend` 跑 `pnpm install --frozen-lockfile`、`type-check`、`check:interactions`、`build:h5`、`build:mp-weixin`。
 - 合并方式：**merge commit**（保留提交历史），规则集只允许这一种，squash 与 rebase 会被拒绝。review 期间的修改直接在分支上追加 commit 或 force-push 均可，合并前不强制整理历史。
 - 合并后删除功能分支；PR 描述或 commit footer 用 `Closes #N` 关联 issue。
 - PR 保持小而聚焦，大改动拆成多个 PR。
@@ -153,7 +159,7 @@ Closes #34.
 - **这个项目的核心不可妥协项**：分诊档必须有兜底、红旗判定不看模型、引用结论必须能核到原文、模型输出不得直接成为对外文案。改动这三处要单独起 PR 并说明。
 - 密钥、token、个人配置不入库。健康相关数据一律不入测试夹具，测试用合成数据。
 - 类型必须过 `mypy` 严格模式，不要用 `Any` 或 `# type: ignore` 逃逸；真需要忽略时写明原因。
-- 非平凡的新逻辑必须留一个最小可运行检查：后端写成 pytest 测试，目录结构与命名镜像被测代码，断言具体输入输出而不是抽象桩数据。前端骨架期没有测试框架，改动以 `pnpm type-check` 加 `pnpm build:h5` 为准，引入测试框架要先在第 8 节登记再动手。
+- 非平凡的新逻辑必须留一个最小可运行检查：后端写成 pytest 测试，目录结构与命名镜像被测代码，断言具体输入输出而不是抽象桩数据。前端骨架期没有测试框架，改动以 `pnpm type-check`、`pnpm check:interactions` 加 `pnpm build:h5` 为准，引入测试框架要先在第 8 节登记再动手。
 
 ## 6. 后端与数据库须知
 
@@ -183,7 +189,7 @@ Closes #34.
 - 只保留 H5 与微信小程序两个平台及其 `dev:` / `build:` 脚本。要加别的端（App、支付宝小程序等）先在 issue 里讨论，别顺手装回来。
 - 小程序端不许出现 `window` / `document` / DOM API，分端差异用条件编译（`// #ifdef H5`、`// #ifdef MP-WEIXIN`）。布局单位优先 `rpx`，适配 PC 宽屏用 `@media` 断点。
 - 请求只走 `src/request/`，页面里不直接调 `uni.request` 或 `axios`。H5 用相对路径 `/api`，由 Vite 代理转发到 8000，代码里不出现后端域名；小程序端没有代理，`request` 会退回 `VITE_API_BASE`，本地默认 `http://localhost:8000/api`，真机必须换成备案过的 HTTPS 域名。
-- 状态用 Pinia，已在 `src/main.ts` 注册，store 以后放 `src/stores/`，现在还没有。
+- 状态用 Pinia，已在 `src/main.ts` 注册，store 放 `src/stores/`，跨页面状态都放这里。
 - 样式先用普通 CSS。`uni.scss` 里的变量要装了 `sass` 才可用，等真需要嵌套或主题变量时再加这个依赖。暂不引入 UI 组件库与原子化 CSS（见第 8 节）。
 - 条件编译注释在 `.ts` 里同样生效，但 `vue-tsc` 看到的是未处理的源码：不要用 `#ifdef` / `#ifndef` 两个分支各写一个同名 `const`，改成 `let` 加条件赋值，否则类型检查报重复声明。
 - 微信小程序主包上限 2MB，图片走 CDN 或外链，页面多了用 `subPackages` 分包。小程序 appid 尚未申请，`manifest.json` 里留空。
@@ -204,5 +210,5 @@ Closes #34.
 | 对象存储（图片上传） | 未选型 | 等真有上传需求 |
 | 接口文档与前端类型生成 | 未接入 | FastAPI 自带 OpenAPI，`openapi-typescript` 是候选方案 |
 | UI 组件库、UnoCSS、`sass` | 未引入 | 样式用普通 CSS |
-| 前端测试框架 | 未引入 | 以 `pnpm type-check`、`pnpm build:h5` 与手测为准 |
+| 前端测试框架 | 未引入 | 用两个 Node 脚本代替：`pnpm check:interactions`（离线，进 CI）、`pnpm check:live`（手动，对本机服务联调）。仍以 `pnpm type-check`、`pnpm build:h5` 与手测为准 |
 | 应用容器化部署 | 推迟 | 开发期应用不进容器；等有服务器再补 `backend/Dockerfile` 与 `docker-compose.prod.yml`（nginx 托管 `frontend/dist`） |
