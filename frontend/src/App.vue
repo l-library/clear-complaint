@@ -11,26 +11,22 @@ onHide(() => {
 });
 </script>
 <style>
-@import url("./styles/tokens.css");
-@import url("./styles/base.css");
-
-uni-button,
-button {
-  transition:
-    transform var(--dur-micro) var(--ease-out),
-    background-color var(--dur-micro) var(--ease-out),
-    border-color var(--dur-micro) var(--ease-out),
-    color var(--dur-micro) var(--ease-out);
-}
-
-uni-button:active,
-button:active {
-  transform: translateY(1px);
-}
-
-uni-button[disabled],
-button[disabled] {
-  opacity: 0.55;
-  cursor: not-allowed;
+@import './styles/workspace.css';
+page { background: #fdfdf7; color: #1b1b18; font-family: Arial, -apple-system, BlinkMacSystemFont, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif; font-size: 16px; }
+button { font-family: inherit; cursor: pointer; }
+button::after { border: 0; }
+button:focus-visible { outline: 2px solid #2463eb; outline-offset: 3px; }
+textarea { font-family: inherit; }
+/* #ifdef H5 */
+uni-button { font-family: inherit; cursor: pointer; }
+.app-shell uni-button::after { border: 0; }
+uni-button:focus-visible { outline: 2px solid #2463eb; outline-offset: 3px; }
+html, body { margin: 0; min-height: 100%; background: #fdfdf7; }
+body { overflow-x: clip; }
+uni-button { -webkit-tap-highlight-color: transparent; }
+input:focus-visible, textarea:focus-visible { outline: 2px solid #2463eb; outline-offset: 2px; }
+/* #endif */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
 </style>

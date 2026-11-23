@@ -9,9 +9,9 @@ export interface Profile {
   sex: Sex | null
   city_code: string | null
   city_name: string | null
-  conditions: string[]
+  conditions: string[] | null
   condition_note: string | null
-  allergies: string[]
+  allergies: string[] | null
   allergy_note: string | null
   required_missing: string[]
   updated_at: string | null
@@ -23,9 +23,9 @@ export interface ProfileUpdate {
   sex?: Sex
   city_code?: string
   city_name?: string
-  conditions?: string[]
+  conditions?: string[] | null
   condition_note?: string
-  allergies?: string[]
+  allergies?: string[] | null
   allergy_note?: string
 }
 

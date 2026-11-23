@@ -25,7 +25,8 @@ export interface EpisodeResult {
     describe: string[]
     go_now: string[]
   }
-  disclaimer: string
+  disclaimer?: string
+  degraded?: boolean
 }
 
 export interface QuestionField {
@@ -36,6 +37,8 @@ export interface QuestionField {
 }
 
 export interface EpisodeDetail {
+  disclaimer: string
+  gate?: { degraded?: boolean; fallback?: boolean }
   episode: {
     id: number
     status: string
@@ -68,9 +71,9 @@ export interface EpisodeSummary {
   created_at: string
   saved_at: string | null
   complaint_excerpt: string
-  triage: string
-  triage_label: string
-  department_primary: string
+  triage: string | null
+  triage_label: string | null
+  department_primary: string | null
   degraded: boolean
 }
 
@@ -81,8 +84,8 @@ export interface PageResult<T> {
   size: number
 }
 
-export function listEpisodes(status?: string): Promise<PageResult<EpisodeSummary>> {
-  const query = status ? `?status=${encodeURIComponent(status)}&page=1&size=20` : '?page=1&size=20'
+export function listEpisodes(status?: string, page = 1): Promise<PageResult<EpisodeSummary>> {
+  const query = `?page=${page}&size=20${status ? `&status=${encodeURIComponent(status)}` : ''}`
   return request(`/episodes${query}`, { auth: true })
 }
 
@@ -95,12 +98,13 @@ function streamEpisode(
   path: string,
   data: Record<string, unknown> | undefined,
   onEvent: (event: EpisodeStreamEvent) => void,
+  key = createIdempotencyKey(),
 ) {
   return streamSse(
     {
       path,
       data,
-      header: { 'Idempotency-Key': createIdempotencyKey() },
+      header: { 'Idempotency-Key': key },
     },
     (event: SseEvent) => {
       onEvent(event as EpisodeStreamEvent)
@@ -112,8 +116,9 @@ export function createEpisodeStream(
   complaint: string,
   onEvent: (event: EpisodeStreamEvent) => void,
   cityCode?: string,
+  key?: string,
 ) {
-  return streamEpisode('/episodes', { complaint, ...(cityCode ? { city_code: cityCode } : {}) }, onEvent)
+  return streamEpisode('/episodes', { complaint, ...(cityCode ? { city_code: cityCode } : {}) }, onEvent, key)
 }
 
 export function clarifyEpisodeStream(
@@ -142,10 +147,14 @@ export function getEpisode(id: number): Promise<EpisodeDetail> {
   return request(`/episodes/${id}`, { auth: true })
 }
 
-export function saveEpisode(id: number, reminder = true): Promise<SaveResponse> {
+export function saveEpisode(id: number, reminder = true, recheckDate?: string): Promise<SaveResponse> {
   return request(`/episodes/${id}/save`, {
     method: 'POST',
-    data: { save: true, reminder },
+    data: { save: true, reminder, ...(recheckDate ? { recheck_date: recheckDate } : {}) },
     auth: true,
   })
+}
+
+export function deleteEpisode(id: number): Promise<null> {
+  return request(`/episodes/${id}`, { method: 'DELETE', auth: true })
 }

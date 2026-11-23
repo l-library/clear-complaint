@@ -33,6 +33,7 @@ ClearComplaint is a split frontend and backend application. `frontend/` is one u
 │   ├── src/request/                Request wrapper shared by H5 and the mini program
 │   ├── src/pages.json              Routes, tabBar, subpackages
 │   ├── src/manifest.json           Per-platform config including the WeChat appid
+│   ├── scripts/                    Node check scripts: check:interactions (CI), check:live (manual)
 │   ├── vite.config.ts              H5 dev proxy for /api (targets port 8000)
 │   └── pnpm-workspace.yaml         All pnpm 12 settings: build allowlist and nodeLinker
 ├── experiment/                     Stage one research artifact: own uv project, never imports backend
@@ -45,6 +46,7 @@ ClearComplaint is a split frontend and backend application. `frontend/` is one u
 │   └── handoff/                    Constraint spec and frozen sample for stage two acceptance
 ├── docs/                           PLAN.md, stage1.md, 赛题调研.md, materials later
 ├── docker-compose.yml              Local Postgres 16
+├── start-local.ps1                 Windows helper: Docker, Postgres, backend, H5 (section 2)
 ├── .github/                        CI and issue templates
 ├── .editorconfig                   Editor formatting rules (enforced by tooling)
 ├── .gitattributes                  Line ending rules (enforced by git)
@@ -66,12 +68,14 @@ ClearComplaint is a split frontend and backend application. `frontend/` is one u
 - Node 26 with pnpm 12. pnpm 12 reads settings only from `frontend/pnpm-workspace.yaml` and no longer reads `.npmrc`. Two entries there cannot be removed: `allowBuilds` lets dependency postinstall scripts run (without it `pnpm install` fails with `ERR_PNPM_IGNORED_BUILDS`), and `nodeLinker: hoisted` keeps a flat node_modules (under the isolated layout, uni-app's rollup cannot resolve pinia's transitive dependencies and `pnpm build:h5` fails).
 - Docker and Docker Compose. Postgres runs only in a container. The Docker daemon must be running (`docker info` has to succeed), otherwise compose commands fail outright.
 - Application processes stay outside containers: uvicorn for the backend, the Vite dev server for the frontend. Reasons are in section 8.
+- `start-local.ps1` is a Windows-only convenience wrapper, listed in the table below. It needs `backend/.env`, keeps existing database data, serves H5 on 5175 rather than the 5173 that `pnpm dev:h5` uses, writes logs to the git-ignored `.tools/runtime/`, and never stops a process it did not start.
 
 | Command | Effect |
 | --- | --- |
 | `docker compose up -d` | Start Postgres (5432), data in the named volume `clear-complaint-db-data` |
 | `docker compose logs -f db` | Follow database logs |
 | `docker compose down` / `down -v` | Stop; the second form also deletes data |
+| `./start-local.ps1` | Windows only: start Docker, Postgres, the backend and the H5 dev server on 5175 |
 | `cd backend && uv sync` | Install dependencies and prepare the venv |
 | `cd backend && uv run uvicorn app.main:app --reload` | Start the backend on 8000, routes under `/api` |
 | `cd backend && uv run pytest` | Backend tests (needs the dockerized Postgres) |
@@ -81,10 +85,12 @@ ClearComplaint is a split frontend and backend application. `frontend/` is one u
 | `cd frontend && pnpm dev:h5` | H5 dev server on 5173, `/api` proxied to 8000 |
 | `cd frontend && pnpm dev:mp-weixin` | Mini program output, open `dist/dev/mp-weixin` in WeChat devtools |
 | `cd frontend && pnpm type-check` | vue-tsc type check |
+| `cd frontend && pnpm check:interactions` | Offline check of auth, refresh, SSE parsing and the chat flow; runs in CI |
+| `cd frontend && pnpm check:live` | Manual end-to-end check against a running local stack, with a temporary synthetic account |
 | `cd frontend && pnpm build:h5` | Frontend sanity check; run it with type-check before committing |
 | `cd frontend && pnpm build:mp-weixin` | Mini program production build in `dist/build/mp-weixin` |
 
-Before committing, run `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest` for the backend and `pnpm type-check && pnpm build:h5` for the frontend. Also run `git diff --check` to catch whitespace and line ending problems.
+Before committing, run `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest` for the backend and `pnpm type-check && pnpm check:interactions && pnpm build:h5` for the frontend. Also run `git diff --check` to catch whitespace and line ending problems.
 
 ## 3. Git workflow
 
@@ -116,9 +122,9 @@ Closes #34.
 - The title follows the Conventional Commit format. The description says at least: **why**, **what changed**, and **how it was verified** (commands run, manual checks done). UI changes include a screenshot or recording.
 - Before merging:
   - The GitHub ruleset requires a PR, and both the `backend` and `frontend` checks must pass. The required approval count is currently 0, so you may merge your own PR; to require review, change the ruleset rather than this document.
-  - Backend changes have run `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`. Frontend changes have run `pnpm type-check && pnpm build:h5`.
+  - Backend changes have run `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`. Frontend changes have run `pnpm type-check && pnpm check:interactions && pnpm build:h5`.
   - Schema changes replay the migrations from an empty database (`docker compose down -v && docker compose up -d`, then `uv run alembic upgrade head`).
-  - CI (`.github/workflows/ci.yml`) is fully green: the `backend` job runs lint, format check, mypy, and pytest; the `frontend` job runs `pnpm install --frozen-lockfile`, `type-check`, `build:h5`, and `build:mp-weixin`.
+  - CI (`.github/workflows/ci.yml`) is fully green: the `backend` job runs lint, format check, mypy, and pytest; the `frontend` job runs `pnpm install --frozen-lockfile`, `type-check`, `check:interactions`, `build:h5`, and `build:mp-weixin`.
 - Merge with a **merge commit** so history is preserved. The ruleset allows only that; squash and rebase are rejected. During review, appending commits or force-pushing to the branch is fine; history does not need to be tidied before merging.
 - Delete the feature branch after merging, and link the issue with `Closes #N` in the PR description or commit footer.
 - Keep PRs small and focused. Split large changes into several PRs.
@@ -153,7 +159,7 @@ Closes #34.
 - **This project's own non-negotiables**: the triage level always has a fallback, red flag rules never consult the model, every cited conclusion must be checkable against its source text, and model output never becomes user-facing copy directly. Changes to those three areas get their own PR with an explanation.
 - Secrets, tokens, and personal configuration never enter the repo. Health data never enters test fixtures; tests use synthetic data.
 - Types must pass `mypy` in strict mode. Do not escape with `Any` or `# type: ignore`; if an ignore is genuinely needed, state why.
-- Non-trivial new logic ships with one minimal runnable check. Backend tests are pytest tests whose layout and names mirror the code under test, asserting concrete inputs and outputs rather than abstract stubs. The frontend has no test framework during the skeleton phase, so changes are verified with `pnpm type-check` and `pnpm build:h5`; adding a framework requires registering it in section 8 first.
+- Non-trivial new logic ships with one minimal runnable check. Backend tests are pytest tests whose layout and names mirror the code under test, asserting concrete inputs and outputs rather than abstract stubs. The frontend has no test framework during the skeleton phase, so changes are verified with `pnpm type-check`, `pnpm check:interactions` and `pnpm build:h5`; adding a framework requires registering it in section 8 first.
 
 ## 6. Backend and database specifics
 
@@ -183,7 +189,7 @@ Closes #34.
 - Only H5 and the WeChat mini program, with their `dev:` and `build:` scripts, are kept. Adding other targets (App, Alipay mini program) starts with an issue; do not install them back on a whim.
 - The mini program must not touch `window`, `document`, or DOM APIs. Express platform differences with conditional compilation (`// #ifdef H5`, `// #ifdef MP-WEIXIN`). Prefer `rpx` for layout and `@media` breakpoints for wide screens.
 - Requests go through `src/request/` only. Pages never call `uni.request` or `axios` directly. H5 uses the relative path `/api`, proxied by Vite to 8000, so backend hostnames never appear in code. The mini program has no proxy, so `request` falls back to `VITE_API_BASE`, defaulting to `http://localhost:8000/api` locally; a real device needs an ICP-filed HTTPS domain.
-- State uses Pinia, already registered in `src/main.ts`. Stores will live in `src/stores/`; there are none yet.
+- State uses Pinia, already registered in `src/main.ts`. Stores live in `src/stores/`; keep cross-page state there.
 - Styles start as plain CSS. Variables in `uni.scss` need the `sass` dependency, so add it only when nesting or theming actually requires it. No UI component library and no atomic CSS for now (section 8).
 - Conditional compilation comments work in `.ts` too, but `vue-tsc` sees the unprocessed source: do not declare the same `const` in both the `#ifdef` and `#ifndef` branches. Use `let` plus conditional assignment, otherwise type checking reports a duplicate declaration.
 - The WeChat mini program main package is capped at 2MB. Serve images from a CDN or external host, and split pages into `subPackages` as the app grows. The mini program appid has not been applied for; `manifest.json` leaves it empty.
@@ -204,5 +210,5 @@ The table lists what we deliberately put off. Doing any of it means changing thi
 | Object storage (image upload) | Not chosen | Wait until there is a real upload need |
 | API docs and frontend type generation | Not wired | FastAPI ships OpenAPI; `openapi-typescript` is the candidate |
 | UI component library, UnoCSS, `sass` | Not added | Plain CSS for now |
-| Frontend test framework | Not added | `pnpm type-check`, `pnpm build:h5`, and manual checks decide |
+| Frontend test framework | Not added | Two Node scripts instead: `pnpm check:interactions` (offline, runs in CI) and `pnpm check:live` (manual, against a local stack). `pnpm type-check`, `pnpm build:h5`, and manual checks still decide |
 | Containerized deployment of the apps | Deferred | Apps stay outside containers during development; add `backend/Dockerfile` and `docker-compose.prod.yml` (nginx serving `frontend/dist`) when there is a server |

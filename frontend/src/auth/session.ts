@@ -17,7 +17,6 @@ export interface AuthSession {
   user: AuthUser
   tokens: TokenPair
   profileComplete: boolean
-  demo: boolean
 }
 
 interface AuthResponse {
@@ -32,7 +31,7 @@ export const DEMO_STORAGE_KEY = 'clear-complaint-demo-mode'
 export function readSession(): AuthSession | null {
   try {
     const stored = uni.getStorageSync(STORAGE_KEY) as AuthSession | ''
-    if (!stored || !stored.tokens?.access_token) return null
+    if (!stored || typeof stored.tokens?.access_token !== 'string' || !stored.tokens.access_token || typeof stored.tokens.refresh_token !== 'string' || !Number.isSafeInteger(stored.user?.id) || typeof stored.user?.phone !== 'string') return null
     return stored
   } catch {
     return null
@@ -57,7 +56,6 @@ export function createSession(response: AuthResponse): AuthSession {
     user: response.user,
     tokens: response.tokens,
     profileComplete: response.profile_complete,
-    demo: false,
   }
 }
 
@@ -72,7 +70,7 @@ export function getRefreshToken(): string {
 export function accessTokenExpiresSoon(bufferSeconds = 120): boolean {
   const expiresAt = readSession()?.tokens.access_expires_at
   if (!expiresAt) return true
-  const timestamp = Date.parse(expiresAt.replace(' ', 'T'))
+  const timestamp = Date.parse(expiresAt.replace(' ', 'T') + (/Z$|[+-]\d\d:\d\d$/.test(expiresAt) ? '' : '+08:00'))
   if (!Number.isFinite(timestamp)) return true
   return timestamp - Date.now() <= bufferSeconds * 1000
 }

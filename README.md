@@ -26,7 +26,7 @@
 
 ### 随访与提醒
 
-分诊档为"自我观察"的，48 到 72 小时后主动追问，未缓解则升级建议。用药提醒由用户自己录入的计划驱动，助手只负责措辞和追问。
+随访与复查提醒关联已保存的问诊，从健康计划进入统一 AI 对话。用药计划根据本人已确认的医嘱录入，计划与打卡持久化到后端；尚不发送系统通知。
 
 ## 技术栈
 
@@ -43,11 +43,13 @@
 
 需要 uv、Node + pnpm、Docker。
 
+Windows 本机已有依赖和 `backend/.env` 时，可在项目根目录运行 `./start-local.ps1`。脚本保留现有数据库数据，检查并启动 Docker、Postgres、后端及 H5 开发服务，检查就绪后输出 `http://127.0.0.1:5175/`。日志位于被 Git 忽略的 `.tools/runtime/`；电脑重启或注销后需要重新启动应用服务。
+
 ```bash
 docker compose up -d                          # Postgres，端口 5432
 cd backend && uv sync                         # 准备虚拟环境与依赖
 cp .env.example .env                          # 本地配置
-cd backend && uv run alembic upgrade head      # 迁移（当前没有迁移脚本）
+cd backend && uv run alembic upgrade head      # 执行迁移
 cd backend && uv run uvicorn app.main:app --reload   # 后端 8000，接口前缀 /api
 cd frontend && pnpm install
 cd frontend && pnpm dev:h5                    # 浏览器 http://localhost:5173
@@ -61,13 +63,11 @@ cd frontend && pnpm dev:h5                    # 浏览器 http://localhost:5173
 
 ## 当前进度
 
-前端已经完成桌面优先的交互预览，包括登录注册、档案完善、连续问诊、动态追问、分诊草稿、结果详情、健康档案、血压趋势、用药管理、提醒随访和数据账户页面。界面使用 Hallmark 的 Dose 方案重做，同时提供手机端响应式布局和免登录交互预览模式。
+前端保留定制的首页、聊天、左侧导航及玻璃账户面板，使用真实 `/api` 请求接入账户与隐私授权、个人档案、SSE 问诊、问诊历史、体征、用药记录、用药计划、提醒响应和数据导出。问诊与随访共用聊天入口；接口失败显示错误，不回退到模拟数据。旧版演示代码已清理。
 
-前端已经封装登录、档案、问诊 SSE、结果、血压、用药、提醒和数据管理请求，并处理 Bearer Token、刷新、登录态守卫、流式中断恢复和错误重试。Hallmark 渲染审查为 `0 FAIL / 0 REFLEX / 0 WARN`，`pnpm type-check` 与 `pnpm build:h5` 均通过。
+后端已包含账户、问诊、档案、提醒、六个 Alembic 迁移和 AgentArts 客户端。平台凭据只写入被 Git 忽略的 `backend/.env`；工作流不可用时返回明确标记的保守兜底结果。OCR、文件上传、独立档案采集路由、结果后问答和系统通知尚未实现。
 
-当前分支中的后端仍只有统一响应、错误码、全局异常处理、`/ping`、`/health`、数据库会话和 Alembic 目录。真实后端和 AgentArts 的最终联调仍需在对应后端分支与实际服务环境中完成。
-
-界面截图、启动方式和联调所需材料见 [前端预览与联调说明](docs/前端预览与联调说明.md)，完整页面与功能范围见 [前端功能与页面清单](docs/前端功能与页面清单.md)。
+真实本机联调：先启动数据库、后端和 H5 开发服务，再在 `frontend/` 执行 `pnpm check:live`。默认通过 `http://127.0.0.1:5175` 验证前端请求与 Pinia 状态；其他本机端口可用 `LIVE_APP_ORIGIN` 指定。脚本仅使用临时合成账号，结束时删除该账号，不写入真实健康资料；运行报告保存在 `output/live-api-check.json`。类型与离线交互校验仍使用 `pnpm type-check`、`pnpm check:interactions`。
 
 计划、实验设计与风险清单见 [docs/PLAN.md](docs/PLAN.md)，赛题规则与平台限制见 [docs/赛题调研.md](docs/赛题调研.md)。
 

@@ -12,6 +12,7 @@ dependencies = [
     "alembic",
     "httpx>=0.28.1",
     "pyjwt>=2.15.1",
+    "tzdata>=2026.6 ; sys_platform == 'win32'",
 ]
 
 [dependency-groups]

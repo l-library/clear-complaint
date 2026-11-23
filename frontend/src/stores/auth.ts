@@ -1,12 +1,11 @@
-import { computed, ref } from 'vue'
+import { computed, onScopeDispose, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { login as loginApi, logout as logoutApi, register as registerApi } from '@/api/auth'
-import { refreshAccessToken } from '@/request'
+import { refreshAccessToken, setAuthExpiredHandler, ApiError } from '@/request'
 import {
   accessTokenExpiresSoon,
   clearAuthStorage,
   createSession,
-  DEMO_STORAGE_KEY,
   getRefreshToken,
   markProfileComplete,
   readSession,
@@ -16,18 +15,27 @@ import {
 
 export const useAuthStore = defineStore('auth', () => {
   const session = ref<AuthSession | null>(readSession())
-  const demo = ref(uni.getStorageSync(DEMO_STORAGE_KEY) === true)
   const loading = ref(false)
 
   const isLoggedIn = computed(() => Boolean(session.value?.tokens.access_token))
   const profileComplete = computed(() => session.value?.profileComplete ?? false)
   const user = computed(() => session.value?.user ?? null)
+  function syncIdentity() {
+    const latest = readSession()
+    const unchanged = latest?.user.id === session.value?.user.id
+    session.value = latest
+    return unchanged
+  }
+  setAuthExpiredHandler(() => { session.value = null }, syncIdentity)
+  // #ifdef H5
+  const syncTabs = () => { syncIdentity() }
+  window.addEventListener('storage', syncTabs)
+  onScopeDispose(() => window.removeEventListener('storage', syncTabs))
+  // #endif
 
   function applySession(next: AuthSession) {
     session.value = next
-    demo.value = false
     writeSession(next)
-    uni.removeStorageSync(DEMO_STORAGE_KEY)
   }
 
   async function login(phone: string, password: string) {
@@ -58,21 +66,12 @@ export const useAuthStore = defineStore('auth', () => {
       if (refreshToken) await logoutApi(refreshToken)
     } finally {
       session.value = null
-      demo.value = false
       clearAuthStorage()
     }
   }
 
-  function enterDemo() {
-    session.value = null
-    demo.value = true
-    writeSession(null)
-    uni.setStorageSync(DEMO_STORAGE_KEY, true)
-  }
-
   function clearLocalSession() {
     session.value = null
-    demo.value = false
     clearAuthStorage()
   }
 
@@ -83,13 +82,16 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function ensureFreshSession() {
-    if (!isLoggedIn.value || !accessTokenExpiresSoon()) return true
-    return refreshAccessToken()
+    if (!syncIdentity()) throw new ApiError(1004, '账户已切换，请重新发起请求。')
+    if (!isLoggedIn.value) throw new ApiError(1004, '请先登录账户。')
+    if (!accessTokenExpiresSoon()) return true
+    if (!await refreshAccessToken()) { clearLocalSession(); throw new ApiError(1004, '登录已过期，请重新登录。') }
+    session.value = readSession()
+    return true
   }
 
   return {
     session,
-    demo,
     loading,
     isLoggedIn,
     profileComplete,
@@ -97,7 +99,6 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     register,
     logout,
-    enterDemo,
     clearLocalSession,
     updateProfileComplete,
     ensureFreshSession,

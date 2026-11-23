@@ -9,7 +9,7 @@ export interface BloodPressure {
 }
 
 export interface ArchiveOverview {
-  profile: Profile
+  profile: Profile | null
   vitals: {
     latest_height_cm: number | null
     latest_weight_kg: number | null
@@ -41,7 +41,7 @@ export interface ReminderItem {
   due_at: string
   status: 'pending' | 'done' | 'skipped' | 'missed' | 'expired'
   title: string
-  body: string
+  body: string | null
   snooze_count: number
 }
 
@@ -58,7 +58,7 @@ export interface ReminderResponseResult {
   status: 'pending' | 'done'
   due_at?: string
   advice?: { level: string; text: string }
-  supplement?: unknown
+  supplement?: { watch_for: string[]; prepare_idx: number[]; next_question: string } | null
 }
 
 export interface VitalRecord {
@@ -68,6 +68,8 @@ export interface VitalRecord {
   systolic: number | null
   diastolic: number | null
   pulse: number | null
+  height_cm: number | null
+  weight_kg: number | null
 }
 
 export function getArchiveOverview(): Promise<ArchiveOverview> {
@@ -78,21 +80,8 @@ export function getArchiveTrend(days = 90, limit = 10): Promise<ArchiveTrend> {
   return request(`/archive/trend?days=${days}&limit=${limit}`, { auth: true })
 }
 
-export function getReminders(): Promise<ReminderResponse> {
-  return request('/reminders', { auth: true })
-}
-
-export function createBloodPressure(payload: {
-  measured_at: string
-  systolic: number
-  diastolic: number
-  pulse?: number
-}): Promise<VitalRecord> {
-  return request('/vitals', {
-    method: 'POST',
-    data: { kind: 'bp', ...payload },
-    auth: true,
-  })
+export function getReminders(date?: string): Promise<ReminderResponse> {
+  return request(`/reminders${date ? `?date=${encodeURIComponent(date)}` : ''}`, { auth: true })
 }
 
 export function respondReminder(
