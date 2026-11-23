@@ -285,7 +285,7 @@
     {
       "field": "duration_text",
       "text": "这种情况持续了多久？",
-      "options": ["不到 1 天", "1–3 天", "4–7 天", "1 周以上"],
+      "options": ["半天", "一两天", "两三天", "一周", "一周以上"],
       "allow_free_text": true
     }
   ]
