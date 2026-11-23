@@ -14,7 +14,10 @@ Thumbs.db
 
 # ---- 后端：uv / Python ----
 .venv/
+.tools/
+output/
 backend/.env
+backend/.local-data/
 __pycache__/
 *.py[cod]
 .pytest_cache/

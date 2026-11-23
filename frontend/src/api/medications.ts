@@ -17,7 +17,7 @@ export interface MedicationPayload {
   frequency_text?: string
   kind: 'long_term' | 'short_term'
   started_on: string
-  ended_on?: string
+  ended_on?: string | null
 }
 
 export function getMedications(): Promise<{ records: Medication[] }> {

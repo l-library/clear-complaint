@@ -1,0 +1,37 @@
+.live-ui { color: var(--ink, #1b1b18); font-size: 14px; line-height: 1.7; }
+.live-page { width: 100%; max-width: 1160px; margin: 0 auto; padding: 40px 42px; box-sizing: border-box; }
+.live-heading, .live-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.live-heading { margin-bottom: 25px; }
+.live-eyebrow { display: block; margin-bottom: 7px; color: #767674; font-size: 11px; letter-spacing: 2px; }
+.live-title { display: block; font-size: 30px; font-weight: 500; line-height: 1.4; }
+.live-subtitle { display: block; font-size: 17px; font-weight: 500; }
+.live-muted { display: block; color: #70706a; font-size: 12px; line-height: 1.8; }
+.live-card { min-width: 0; padding: 24px; margin-top: 18px; border: 1px solid #e4e4df; border-radius: 18px; background: #fff; }
+.live-ui button { margin: 0; min-height: 40px; font-size: 13px; line-height: 1.5; color: inherit; }
+.live-primary, .live-secondary, .live-danger { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 17px; border-radius: 25px; box-sizing: border-box; }
+.live-ui .live-primary { background: #2463eb; color: #fff; }
+.live-ui .live-secondary { border: 1px solid #deded7; background: #fff; color: #454540; }
+.live-ui .live-danger { border: 1px solid #ead9d5; background: #fff; color: #a14136; }
+.live-ui button[disabled] { opacity: .5; }
+.live-ui .live-link { padding: 5px 0; color: #2463eb; background: transparent; text-align: left; text-decoration: none; font-size: 13px; }
+.live-tabs { display: flex; flex-wrap: wrap; gap: 7px; margin: 22px 0; }
+.live-tabs button { padding: 9px 15px; border-radius: 22px; background: transparent; color: #70706a; }
+.live-tabs .active { background: #f0f5ff; color: #2463eb; }
+.live-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 17px; margin: 18px 0; }
+.live-full { grid-column: 1 / -1; }
+.live-label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 500; }
+.live-input, .live-select, .live-textarea { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #deded7; border-radius: 10px; background: #ffffffb8; color: #1b1b18; font-size: 14px; }
+.live-input { height: 46px; padding: 0 12px; }
+.live-select { min-height: 46px; padding: 11px 12px; }
+.live-textarea { height: 90px; padding: 12px; line-height: 1.7; }
+.live-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; }
+.live-error, .live-notice { display: block; padding: 13px 15px; margin: 14px 0; border-radius: 11px; font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.live-error { color: #a14136; background: #fff2ef; }
+.live-notice { color: #62625b; background: #f5f5f0; }
+.live-blank { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px 20px; text-align: center; }
+.live-list-row { padding: 18px 0; border-bottom: 1px solid #ededE8; }
+.live-list-row:last-child { border-bottom: 0; }
+.live-preserve { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
+.live-pill { flex-shrink: 0; padding: 4px 9px; border-radius: 18px; background: #f5f5f0; font-size: 11px; color: #62625b; }
+.live-check { display: flex; align-items: flex-start; gap: 6px; margin: 14px 0; font-size: 12px; color: #62625b; }
+@media (max-width: 760px) { .live-page { padding: 26px 20px; } .live-heading { flex-wrap: wrap; } .live-title { font-size: 26px; } .live-grid { grid-template-columns: minmax(0, 1fr); } .live-card { padding: 20px 16px; } .live-ui button { min-height: 44px; } }

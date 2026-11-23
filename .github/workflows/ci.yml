@@ -122,6 +122,10 @@ jobs:
         working-directory: frontend
         run: pnpm build:h5
 
+      - name: Check live interactions
+        working-directory: frontend
+        run: pnpm check:interactions
+
       - name: Build WeChat mini program
         working-directory: frontend
         run: pnpm build:mp-weixin
