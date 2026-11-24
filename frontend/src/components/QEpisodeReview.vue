@@ -18,7 +18,7 @@
           <view class="red-flag-list"><text class="live-muted">{{ gate?.red_flags?.length ? '命中的红旗规则' : '本次校验未记录红旗命中' }}</text><text v-for="flag in gate?.red_flags || []" :key="flag.rule_id" class="red-flag">{{ flag.name }}</text></view>
           <text v-if="gate?.fallback || gate?.degraded" class="live-notice">本次采用了保守降级处理。</text>
         </template>
-        <text v-else class="live-muted">暂无服务端校验记录。</text>
+        <text v-else class="live-muted">暂无校验记录。</text>
       </view>
     </template>
     <text v-else class="live-muted">{{ pending ? '正在等待本次问诊的整理结果…' : '问诊整理信息将在这里显示。' }}</text>

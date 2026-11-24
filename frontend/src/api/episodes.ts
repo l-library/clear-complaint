@@ -61,6 +61,7 @@ export interface EpisodeDetail {
     round: number
     round_limit: number
     missing_fields: string[]
+    unknown_fields?: string[]
     questions: QuestionField[]
   } | null
 }

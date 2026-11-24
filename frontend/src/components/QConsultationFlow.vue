@@ -7,7 +7,7 @@
         <label class="live-label" for="followup-note">补充说明（选填）</label><textarea id="followup-note" v-model="workspace.followUpNote" class="live-textarea" maxlength="200" />
         <button role="button" tabindex="0" @keydown="activateButton" class="live-primary" :disabled="workspace.pending" @click="workspace.submitFollowUp">提交随访</button>
       </template>
-      <text v-else class="live-notice">本次随访已处理，记录保存在服务器。</text>
+      <text v-else class="live-notice">本次随访已处理，记录已保存。</text>
       <view v-if="workspace.followUpResponse?.advice" class="result-section"><text class="live-label">复评建议</text><text class="live-preserve">{{ workspace.followUpResponse.advice.text }}</text><text v-for="item in workspace.followUpResponse.supplement?.watch_for || []" :key="item" class="prep-item">{{ item }}</text><text class="prep-item">{{ workspace.followUpResponse.supplement?.next_question || '' }}</text></view>
       <view v-if="workspace.followUpResponse?.supplement?.prepare_idx.length" class="result-section">
         <text class="live-label">就医准备</text><text class="live-muted">本次随访关联了 {{ workspace.followUpResponse.supplement.prepare_idx.length }} 项原问诊准备事项，请在原问诊清单中查看。</text>
@@ -20,7 +20,7 @@
       <view class="live-actions"><button role="button" tabindex="0" @keydown="activateButton" class="live-primary" :disabled="workspace.pending" @click="workspace.submitAnswers">提交补充</button><button role="button" tabindex="0" @keydown="activateButton" class="live-secondary" :disabled="workspace.pending" @click="workspace.skipClarify">跳过本轮</button></view>
     </view>
     <view v-if="workspace.result" class="live-card result-card">
-      <text v-if="workspace.result.degraded || workspace.detail?.gate?.fallback" class="live-notice" role="status">智能生成未完成，当前展示后端的保守建议。</text>
+      <text v-if="workspace.result.degraded || workspace.detail?.gate?.fallback" class="live-notice" role="status">智能生成未完成，当前提供保守的就医建议。</text>
       <view class="live-row"><text class="live-subtitle">就医建议</text><text class="triage-badge" :class="{ emergency: workspace.result.triage === 'emergency' }">{{ workspace.result.triage_label }}</text></view>
       <text class="urgency">{{ workspace.result.urgency_note }}</text>
       <view class="result-section"><text class="live-label">建议科室</text><text>{{ workspace.result.department_primary }}<text v-if="workspace.result.department_secondary"> / {{ workspace.result.department_secondary }}</text></text></view>

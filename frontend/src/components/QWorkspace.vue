@@ -1,44 +1,7 @@
 <template>
-  <view class="app-shell" :class="{ 'workspace-shell': screen === 'workspace', 'is-transitioning': transferring }">
-    <template v-if="screen === 'landing'">
-      <view class="landing-header">
-        <view class="wordmark">
-          <image src="/static/brand.svg" class="brand-mark" />
-          <text>ClearComplaint</text>
-        </view>
-        <view class="header-actions">
-          <button role="button" tabindex="0" @keydown="activateButton" class="text-button archive-link" @click="navigate('archive')">Health records</button>
-          <button role="button" tabindex="0" @keydown="activateButton" class="small-primary" @click="navigate('chat')">Start chat</button>
-          <button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="打开导航菜单" @click="menuOpen = !menuOpen"><QIcon :name="menuOpen ? 'close' : 'menu'" /></button>
-        </view>
-        <view v-if="menuOpen" class="header-menu">
-          <button role="button" tabindex="0" @keydown="activateButton" @click="navigate('chat'); menuOpen = false">AI 对话</button>
-          <button role="button" tabindex="0" @keydown="activateButton" @click="navigate('archive'); menuOpen = false">健康档案</button>
-          <button role="button" tabindex="0" @keydown="activateButton" @click="navigate('plans'); menuOpen = false">健康计划</button>
-          <button role="button" tabindex="0" @keydown="activateButton" @click="showProfile(); menuOpen = false">账户信息</button>
-        </view>
-      </view>
-      <view class="landing-main">
-        <view class="landing-intro">
-          <QBrandMark class="hero-mark" animated />
-          <view class="landing-title">Hi, I’m <text class="name-accent">ClearComplaint</text></view>
-          <text class="intro-copy">Tell me how you’re feeling.<text class="strong"> Let’s make it clear.</text></text>
-          <text class="intro-detail">Keep your symptoms, health records and follow-ups in one place.</text>
-        </view>
-        <view class="landing-composer">
-          <QComposer v-model="draft" label="What brings you in?" placeholder="Describe a symptom or ask a health question…" :error="error" @send="handleSend" @attach="navigate('archive')" />
-          <view class="composer-footnote">
-            <text>Sign in to save your records.</text>
-            <view><QIcon name="shield" /><text>Health information only</text></view>
-          </view>
-        </view>
-      </view>
-      <view class="landing-footer"><text>ClearComplaint · 清诉</text><text>Health information only</text></view>
-    </template>
-
-    <template v-else>
+  <view class="app-shell workspace-shell" :class="{ 'is-transitioning': transferring }">
       <view class="sidebar" :class="{ 'sidebar-expanded': sidebarExpanded }">
-        <button role="button" tabindex="0" @keydown="activateButton" v-if="sidebarExpanded" class="sidebar-logo" aria-label="返回首页" @click="goHome">
+        <button role="button" tabindex="0" @keydown="activateButton" v-if="sidebarExpanded" class="sidebar-logo" aria-label="返回对话" @click="goHome">
           <image src="/static/brand.svg" class="brand-mark" /><text v-if="sidebarExpanded" class="sidebar-brand">清诉</text>
         </button>
         <button role="button" tabindex="0" @keydown="activateButton" class="sidebar-collapse icon-button" :aria-label="sidebarExpanded ? '收起导航' : '展开导航'" :aria-expanded="sidebarExpanded" @click="sidebarExpanded = !sidebarExpanded"><QIcon name="collapse" /></button>
@@ -66,10 +29,10 @@
         </view>
       </view>
       <view class="workspace-main">
-        <view v-if="activeTab === 'chat'" class="chat-mobile-toolbar"><button role="button" tabindex="0" @keydown="activateButton" class="mobile-home" aria-label="返回首页" @click="goHome"><image src="/static/brand.svg" /><text>ClearComplaint</text></button><view><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="新建问诊" @click="requestNewConversation"><QIcon name="plus" /></button><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="最近对话" :aria-expanded="historyOpen" @click="historyOpen = !historyOpen"><QIcon name="clock" /></button></view></view>
+        <view v-if="activeTab === 'chat'" class="chat-mobile-toolbar"><button role="button" tabindex="0" @keydown="activateButton" class="mobile-home" aria-label="返回对话" @click="goHome"><image src="/static/brand.svg" /><text>ClearComplaint</text></button><view><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="新建问诊" @click="requestNewConversation"><QIcon name="plus" /></button><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="最近对话" :aria-expanded="historyOpen" @click="historyOpen = !historyOpen"><QIcon name="clock" /></button></view></view>
         <view v-if="activeTab !== 'chat'" class="workspace-header">
           <view class="breadcrumb"><text class="breadcrumb-brand">清诉</text><text class="slash">/</text><text>{{ pageTitle }}</text></view>
-          <view class="workspace-actions"><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="账户信息" @click="showProfile"><QIcon name="user" /></button><button role="button" tabindex="0" @keydown="activateButton" class="icon-button mobile-history-button" aria-label="最近对话" :aria-expanded="historyOpen" @click="historyOpen = !historyOpen"><QIcon name="clock" /></button><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="返回首页" @click="goHome"><QIcon name="home" /></button></view>
+          <view class="workspace-actions"><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="账户信息" @click="showProfile"><QIcon name="user" /></button><button role="button" tabindex="0" @keydown="activateButton" class="icon-button mobile-history-button" aria-label="最近对话" :aria-expanded="historyOpen" @click="historyOpen = !historyOpen"><QIcon name="clock" /></button><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="返回对话" @click="goHome"><QIcon name="home" /></button></view>
         </view>
         <view v-if="historyOpen" class="history-menu"><text class="recent-heading">最近对话</text><button role="button" tabindex="0" @keydown="activateButton" v-for="item in recentConversations" :key="item.id" class="recent-conversation" @click="openConversation(item.id); historyOpen = false"><QIcon name="chat" /><view><text class="recent-title">{{ item.title }}</text><text class="recent-kind">问诊</text></view></button><button role="button" tabindex="0" @keydown="activateButton" class="history-new" @click="requestNewConversation(); historyOpen = false">＋ 新建问诊</button></view>
         <view class="workspace-content">
@@ -78,12 +41,12 @@
           <view v-if="activeTab === 'chat' && !messages.length" class="empty-chat">
             <view class="chat-welcome">
               <QBrandMark class="welcome-mark" animated />
-              <view class="welcome-title">Hey you, what brings you in?</view>
+              <view class="welcome-title">今天，有什么想告诉我？</view>
             </view>
             <view class="chat-entry-composer">
-              <button role="button" tabindex="0" @keydown="activateButton" class="record-connector" @click="navigate('archive')"><text>Connect your medical records</text><QIcon name="arrow-right" /></button>
-              <QComposer ref="entryComposer" v-model="draft" compact placeholder="Ask a question about your health…" :error="error" :pending="pending" @send="handleSend" @attach="navigate('archive')" />
-              <text class="medical-note">ClearComplaint does not replace a licensed physician.</text>
+              <button role="button" tabindex="0" @keydown="activateButton" class="record-connector" @click="navigate('archive')"><text>查看我的健康档案</text><QIcon name="arrow-right" /></button>
+              <QComposer ref="entryComposer" v-model="draft" compact placeholder="描述你的不适，或写下想了解的健康问题…" :error="error" :pending="pending" @send="handleSend" @attach="navigate('archive')" />
+              <text class="medical-note">健康信息整理，不能替代医生诊断。</text>
             </view>
             <view class="quick-start"><view class="prompt-list"><button role="button" tabindex="0" @keydown="activateButton" v-for="prompt in prompts" :key="prompt.title" class="prompt-chip" @click="choosePrompt(prompt.content)"><text>{{ prompt.title }}</text></button></view></view>
           </view>
@@ -97,13 +60,13 @@
                     <view v-if="message.role === 'assistant'" class="assistant-identity"><image src="/static/brand.svg" /><text>清诉</text></view>
                     <view :id="`bubble-${message.id}`" class="message-bubble" :class="{ 'bubble-in-flight': message.id === flyingMessageId }"><text>{{ message.content }}</text></view>
                   </view>
-                  <view v-if="pending" id="message-pending" class="pending-message" role="status"><view class="loading-dots"><text /><text /><text /></view><text>{{ store.stage || '正在读取服务响应…' }}</text></view>
+                  <view v-if="pending" id="message-pending" class="pending-message" role="status"><view class="loading-dots"><text /><text /><text /></view><text>{{ store.stage || '正在整理你的描述…' }}</text></view>
                   <QConsultationFlow />
                   <view id="message-end" class="message-end" />
                 </view>
               </scroll-view>
               <view class="conversation-composer">
-                <view class="conversation-tools"><text>{{ isFollowUp ? '提交随访后由服务器保存' : '核对建议后，可保存至健康档案' }}</text><button v-if="!isFollowUp" role="button" tabindex="0" @keydown="activateButton" class="save-button" :disabled="pending || saved || !store.result" @click="saveCurrentConversation"><QIcon :name="saved ? 'check' : 'save'" /><text>{{ saved ? '已归档' : '核对并归档' }}</text></button></view>
+                <view class="conversation-tools"><text>{{ isFollowUp ? '提交后保存本次随访' : '核对建议后，可保存至健康档案' }}</text><button v-if="!isFollowUp" role="button" tabindex="0" @keydown="activateButton" class="save-button" :disabled="pending || saved || !store.result" @click="saveCurrentConversation"><QIcon :name="saved ? 'check' : 'save'" /><text>{{ saved ? '已归档' : '核对并归档' }}</text></button></view>
                 <view v-if="isCompletedFollowUp" class="completed-conversation"><QIcon name="check" /><text>本次随访已完成，记录已归档。出现新的不适可以新建问诊。</text><button role="button" tabindex="0" @keydown="activateButton" @click="requestNewConversation">新建问诊</button></view>
                 <QComposer v-else ref="replyComposer" v-model="draft" compact :context-label="isFollowUp ? '随访回复' : '问诊交流'" :placeholder="isFollowUp ? '随访补充说明…' : store.result ? '描述新的不适，开始新问诊…' : '请先填写上方的补充问题…'" :pending="pending" :error="error" @send="handleSend" @attach="navigate('archive')" />
                 <text class="medical-note">健康信息整理，不构成诊断。</text>
@@ -123,7 +86,6 @@
       <view class="mobile-nav" aria-label="主要导航">
         <button role="button" tabindex="0" @keydown="activateButton" v-for="tab in navigationTabs" :key="tab.id" :class="{ 'mobile-tab-active': activeTab === tab.id }" :aria-pressed="activeTab === tab.id" @click="navigate(tab.id)"><QIcon :name="tab.icon" /><text>{{ tab.title }}</text></button>
       </view>
-    </template>
     <view v-if="store.accountOpen" class="account-overlay" @click="store.accountOpen = false"><view class="context-column account-dialog" role="dialog" aria-modal="true" aria-label="账户信息" @click.stop @keydown="handleDialogKey"><button role="button" tabindex="0" @keydown="activateButton" class="icon-button account-close" aria-label="关闭账户信息" @click="store.accountOpen = false"><QIcon name="close" /></button><QAccountPanel /></view></view>
     <QMessageTransition ref="messageTransition" @complete="finishTransfer" />
   </view>
@@ -146,8 +108,7 @@ import { useLiveWorkspaceStore, type WorkspaceTab } from '@/stores/liveWorkspace
 import type { ReminderItem } from '@/api/archive'
 
 const store = useLiveWorkspaceStore()
-const { screen, activeTab, draft, messages, pending, error, saved, activeConversation, recentConversations } = storeToRefs(store)
-const menuOpen = ref(false)
+const { activeTab, draft, messages, pending, error, saved, activeConversation, recentConversations } = storeToRefs(store)
 const sidebarExpanded = ref(false)
 const entryComposer = ref<InstanceType<typeof QComposer> | null>(null)
 const replyComposer = ref<InstanceType<typeof QComposer> | null>(null)
@@ -168,9 +129,9 @@ const messageTransition = ref<InstanceType<typeof QMessageTransition> | null>(nu
 const transferring = ref(false)
 const flyingMessageId = ref('')
 const prompts = [
-  { title: 'Follow up eye issue', content: '我想记录眼睛不适的变化。' },
-  { title: 'Review my symptoms', content: '我想整理一下最近的症状。' },
-  { title: 'Follow up eye pain', content: '我想补充眼部疼痛的情况。' },
+  { title: '描述我的症状', content: '我想记录最近不适的变化。' },
+  { title: '整理就医问题', content: '我想整理一下最近的症状。' },
+  { title: '记录不适变化', content: '我想补充目前不适的情况。' },
 ]
 
 function measure(selector: string): Promise<ElementRect | null> {
@@ -183,15 +144,14 @@ function measure(selector: string): Promise<ElementRect | null> {
 }
 
 async function handleSend() {
-  if (transferring.value || (pending.value && screen.value !== 'landing')) return
-  const fromLanding = screen.value === 'landing'
-  const shouldAnimate = fromLanding || messages.value.length === 0
+  if (transferring.value || pending.value) return
+  const shouldAnimate = messages.value.length === 0
   if (!draft.value.trim() || !shouldAnimate) {
     store.sendMessage()
     return
   }
   const text = draft.value.trim()
-  const originSelector = fromLanding ? '.landing-composer .composer' : '.chat-entry-composer .composer'
+  const originSelector = '.chat-entry-composer .composer'
   transferring.value = true
   const origin = await measure(originSelector)
   if (!store.sendMessage()) { finishTransfer(); return }
@@ -208,7 +168,7 @@ async function handleSend() {
 function finishTransfer() {
   transferring.value = false
   flyingMessageId.value = ''
-  if (screen.value === 'workspace' && activeTab.value === 'chat') navigate('chat')
+  if (activeTab.value === 'chat') navigate('chat')
 }
 
 function choosePrompt(content: string) {
@@ -254,7 +214,7 @@ function openFollowUp(reminder: ReminderItem) {
 function saveCurrentConversation() {
   uni.showModal({
     title: '核对并归档咨询记录',
-    content: '确认将本次服务器生成的分诊建议保存至健康档案？这不等同于医生诊断。',
+    content: '确认将本次本次就医建议保存至健康档案？这不等同于医生诊断。',
     confirmText: '确认归档',
     cancelText: '继续核对',
     success: (result) => { if (result.confirm) void store.saveConversation(store.saveReminder, store.recheckDate || undefined) },
@@ -262,8 +222,7 @@ function saveCurrentConversation() {
 }
 
 function goHome() {
-  screen.value = 'landing'
-  uni.redirectTo({ url: '/pages/index/index' })
+  navigate('chat')
 }
 
 function showProfile() {
@@ -291,8 +250,8 @@ watch(() => store.accountOpen, async (open) => {
 onMounted(() => { void store.initialize() })
 
 watch(draft, () => { if (draft.value.trim()) error.value = '' })
-watch(activeTab, (tab) => { if (screen.value === 'workspace' && !transferring.value) navigate(tab) })
-watch(() => activeConversation.value?.id, () => { if (screen.value === 'workspace' && activeTab.value === 'chat' && !transferring.value && !store.followUpReminder) navigate('chat') })
+watch(activeTab, (tab) => { if (!transferring.value) navigate(tab) })
+watch(() => activeConversation.value?.id, () => { if (activeTab.value === 'chat' && !transferring.value && !store.followUpReminder) navigate('chat') })
 watch([messageCount, pending, activeTab, () => activeConversation.value?.id], async () => {
   await nextTick()
   messageScrollTop.value += 100000
@@ -318,31 +277,10 @@ watch([messageCount, pending, activeTab, () => activeConversation.value?.id], as
   color: var(--ink);
   background: #fdfdf7;
 }
-.landing-header { height: max(76px, calc(102 * var(--u))); padding: 0 5.8vw; display: flex; align-items: center; justify-content: space-between; box-sizing: border-box; }
-.wordmark { display: flex; align-items: center; gap: 8px; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(22px, calc(34 * var(--u)), 40px); letter-spacing: -1px; }
 .brand-mark { width: max(30px, calc(36 * var(--u))); height: max(26px, calc(36 * var(--u))); flex-shrink: 0; }
-.header-actions { display: flex; align-items: center; gap: max(9px, calc(14 * var(--u))); }
-.text-button { margin: 0; padding: 0 17px; border: 1px solid #d1d1ca; border-radius: 30px; background: transparent; font-size: clamp(13px, calc(18 * var(--u)), 20px); line-height: max(38px, calc(52 * var(--u))); color: var(--ink); }
-.small-primary { margin: 0; padding: 0 max(16px, calc(22 * var(--u))); min-height: 38px; border-radius: 32px; font-size: clamp(14px, calc(18 * var(--u)), 20px); line-height: max(38px, calc(52 * var(--u))); background: #0b0b09; color: #fff; }
 .icon-button { display: flex; align-items: center; justify-content: center; width: max(38px, calc(58 * var(--u))); height: max(38px, calc(58 * var(--u))); margin: 0; padding: 0; border-radius: 12px; background: transparent; }
 .icon-button .q-icon { width: max(20px, calc(26 * var(--u))); height: max(20px, calc(26 * var(--u))); }
 .icon-button:hover { background: var(--surface-hover); }
-.header-menu { position: absolute; right: 5.8vw; top: max(70px, calc(84 * var(--u))); z-index: 20; min-width: 170px; padding: 7px; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 12px 36px #1b1b1810; animation: reveal .2s ease both; }
-.header-menu button { margin: 0; min-height: 44px; padding: 12px; border-radius: 8px; text-align: left; font-size: 14px; line-height: 1.5; background: transparent; color: var(--ink); }
-.header-menu button:hover { background: var(--surface-soft); }
-.landing-main { padding-top: max(35px, calc(19.95vh - max(76px, calc(102 * var(--u))))); padding-bottom: 110px; }
-.landing-intro { text-align: center; }
-.hero-mark { width: calc(115 * var(--u)); height: calc(96 * var(--u)); margin: 0 auto calc(20 * var(--u)); animation: reveal .45s ease both; }
-.landing-title { font-family: Georgia, 'Times New Roman', serif; font-size: clamp(38px, calc(74 * var(--u)), 86px); font-weight: 400; line-height: 1.18; letter-spacing: -1.8px; animation: reveal .55s ease both; }
-.name-accent { border-bottom: max(2px, calc(5 * var(--u))) dashed #b8dcb9; padding-bottom: 1px; }
-.intro-copy, .intro-detail { display: block; width: 29vw; max-width: 800px; min-width: 340px; margin: max(20px, calc(28 * var(--u))) auto 0; font-size: clamp(14px, calc(21 * var(--u)), 25px); color: var(--muted); line-height: 1.5; animation: reveal .55s .1s ease both; }
-.strong { color: #5d5d59; font-weight: 600; }
-.intro-detail { margin-top: max(15px, calc(20 * var(--u))); animation-delay: .18s; }
-.landing-composer { --composer-height: calc(222 * var(--u)); width: 32.36vw; max-width: 1050px; margin: max(42px, calc(68 * var(--u))) auto 0; animation: reveal .55s .24s ease both; }
-.composer-footnote { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-top: max(13px, calc(20 * var(--u))); font-size: clamp(11px, calc(14 * var(--u)), 16px); color: var(--muted); }
-.composer-footnote > view { display: flex; align-items: center; gap: 7px; }
-.composer-footnote .q-icon { width: 17px; height: 17px; opacity: .6; }
-.landing-footer { position: absolute; right: 5.8vw; bottom: 28px; left: 5.8vw; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
 .workspace-shell { display: flex; }
 .sidebar { position: fixed; z-index: 30; inset: 0 auto 0 0; width: max(60px, 4.65vw); display: flex; flex-direction: column; align-items: center; border-right: 1px solid var(--line); background: #fdfdf7; box-sizing: border-box; transition: width .22s ease, box-shadow .22s ease; }
 .sidebar-expanded { width: 248px; align-items: stretch; box-shadow: 20px 0 45px #1b1b1808; }
@@ -480,33 +418,15 @@ button:active { transform: scale(.97); }
   .conversation-column { min-height: calc(100dvh - 66px); }
   .messages-scroll { min-height: 280px; }
   .context-column { max-height: 480px; border-radius: 20px; }
-  .landing-composer { min-width: 0; width: 64vw; --composer-height: 170px; }
   .chat-entry-composer { min-width: 0; width: 70vw; --composer-height: 160px; }
-  .landing-title { font-size: 42px; }
-  .landing-main { padding-top: 10vh; }
-  .intro-copy, .intro-detail { width: 62vw; min-width: 0; }
   .welcome-title { font-size: 36px; }
-  .hero-mark, .welcome-mark { width: 84px; height: 70px; }
+  .welcome-mark { width: 84px; height: 70px; }
   .chat-entry-composer { margin-top: 30px; }
   .record-connector { height: 61px; margin-bottom: -20px; }
   .conversation-composer { --composer-height: 160px; }
 }
 @media (max-width: 600px) {
-  .landing-header { height: 80px; padding: 0 22px; }
-  .wordmark { font-size: 20px; }
-  .wordmark .brand-mark { width: 28px; height: 25px; }
-  .header-actions { gap: 5px; }
-  .archive-link { display: none; }
-  .small-primary { min-height: 36px; padding: 0 14px; font-size: 12px; line-height: 36px; }
   .icon-button { width: 34px; height: 36px; }
-  .landing-main { padding-top: 8vh; padding-bottom: 110px; }
-  .hero-mark { margin-bottom: 20px; }
-  .landing-title { padding: 0 25px; font-size: 38px; letter-spacing: -1.2px; }
-  .intro-copy, .intro-detail { width: calc(100% - 64px); font-size: 14px; }
-  .intro-detail { margin-top: 16px; }
-  .landing-composer { width: calc(100% - 40px); margin-top: 40px; --composer-height: 185px; }
-  .composer-footnote { font-size: 10px; }
-  .landing-footer { left: 22px; right: 22px; bottom: 22px; font-size: 10px; }
   .sidebar { display: none; }
   .chat-mobile-toolbar { display: flex; height: 60px; align-items: center; justify-content: space-between; gap: 10px; padding: 0 20px; }
   .chat-mobile-toolbar > view { display: flex; gap: 4px; }
@@ -517,7 +437,7 @@ button:active { transform: scale(.97); }
   .mobile-history-button { display: flex; }
   .empty-chat { min-height: calc(100dvh - 127px); padding: 8vh 20px 55px; }
   .welcome-title { margin-top: 20px; max-width: 330px; font-size: 34px; letter-spacing: -.8px; }
-  .hero-mark, .welcome-mark { width: 78px; height: 65px; }
+  .welcome-mark { width: 78px; height: 65px; }
   .chat-entry-composer { width: 100%; margin-top: 32px; --composer-height: 172px; }
   .record-connector { font-size: 13px; }
   .prompt-list { gap: 7px; }

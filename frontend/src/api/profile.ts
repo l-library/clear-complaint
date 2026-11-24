@@ -21,8 +21,8 @@ export interface ProfileUpdate {
   name?: string
   birth_date?: string
   sex?: Sex
-  city_code?: string
-  city_name?: string
+  city_code?: string | null
+  city_name?: string | null
   conditions?: string[] | null
   condition_note?: string
   allergies?: string[] | null

@@ -8,6 +8,10 @@
       }
     },
     {
+      "path": "pages/privacy/index",
+      "style": { "navigationStyle": "custom", "navigationBarTitleText": "清诉 · 隐私说明" }
+    },
+    {
       "path": "pages/chat/index",
       "style": { "navigationStyle": "custom", "navigationBarTitleText": "清诉 · AI 对话" }
     },

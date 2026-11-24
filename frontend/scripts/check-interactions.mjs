@@ -23,7 +23,8 @@ function loader(overrides = {}, globals = {}) {
     if (name === 'vue') return vue
     if (name === 'pinia') return pinia
     if (!name.startsWith('@/')) return require(name)
-    if (name.endsWith('.vue') && !['QWorkspace', 'QLiveArchive', 'QEpisodeReview', 'QConsultationFlow'].some((component) => name === `@/components/${component}.vue`)) return {}
+    if (name.endsWith('.json')) return { default: JSON.parse(readFileSync(new URL(name.slice(2), src), 'utf8')) }
+    if (name.endsWith('.vue') && !['QWorkspace', 'QLiveArchive', 'QLivePlans', 'QAccountPanel', 'QCityPicker', 'QEpisodeReview', 'QConsultationFlow'].some((component) => name === `@/components/${component}.vue`)) return {}
     if (cache.has(name)) return cache.get(name)
     let url = new URL(name.slice(2) + (name.endsWith('.vue') ? '' : '.ts'), src)
     if (!existsSync(url)) url = new URL(name.slice(2) + '/index.ts', src)
@@ -85,7 +86,7 @@ finishOldRefresh()
 await assert.rejects(oldAccountRequest)
 assert.equal(sessions.getAccessToken(), 'SYNTHETIC-ACCOUNT-B', 'An old refresh must not overwrite or clear the new account')
 network = (options) => options.fail({ errMsg: 'network failed' })
-await assert.rejects(api.request('/profile', { auth: true }), /无法连接本机后端/)
+await assert.rejects(api.request('/profile', { auth: true }), (cause) => cause.code === -1)
 let expired = false
 api.setAuthExpiredHandler(() => { expired = true })
 network = (options) => options.success({ statusCode: 401, data: { code: 1004, message: 'expired' } })
@@ -286,6 +287,65 @@ assert.equal(anonymous.creations.length, 0)
 assert.equal(anonymous.store.draft, 'SYNTHETIC UNSENT')
 assert.equal(anonymous.store.accountOpen, true)
 anonymous.stop()
+
+const formAuth = vue.reactive({ user: { id: 43 }, isLoggedIn: true, updateProfileComplete() {} })
+const formWorkspace = vue.reactive({ patientProfile: clone(profile), initialized: true, error: '' })
+const profileWrites = [], policyRoutes = []
+let rejectProfile = true
+const formModules = loader({
+  vue: { ...vue, onMounted() {} },
+  '@/stores/auth': { useAuthStore: () => formAuth },
+  '@/stores/liveWorkspace': { useLiveWorkspaceStore: () => formWorkspace },
+  '@/api/profile': { updateProfile: async (payload) => { profileWrites.push(payload); if (rejectProfile) throw new Error('SYNTHETIC SAVE FAILED'); return { ...clone(profile), ...payload } } },
+}, { uni: { navigateTo: ({ url }) => policyRoutes.push(url) } })
+pinia.setActivePinia(pinia.createPinia())
+const firstFormScope = vue.effectScope()
+const firstForm = firstFormScope.run(() => formModules('@/components/QAccountPanel.vue').default.setup({}, { expose() {} }))
+firstForm.form.value.name = 'SYNTHETIC UNSAVED'
+firstForm.editing.value = true
+firstForm.saveProfile()
+await settle()
+assert.match(firstForm.error.value, /SAVE FAILED/)
+firstFormScope.stop()
+const secondFormScope = vue.effectScope()
+const secondForm = secondFormScope.run(() => formModules('@/components/QAccountPanel.vue').default.setup({}, { expose() {} }))
+assert.equal(secondForm.form.value.name, 'SYNTHETIC UNSAVED', 'Reopening a failed form must retain the draft')
+assert.equal(secondForm.editing.value, true)
+assert.equal(profileWrites[0].city_code, null, 'An unselected optional city must be submitted as null')
+assert.equal(profileWrites[0].city_name, null)
+rejectProfile = false
+secondForm.saveProfile()
+await settle()
+assert.equal(secondForm.error.value, '')
+secondForm.openPolicy(false)
+assert.equal(policyRoutes[0], '/pages/privacy/index?section=privacy')
+const cityChanges = []
+const city = formModules('@/components/QCityPicker.vue').default.setup({ code: '', name: '' }, { expose() {}, emit: (...args) => cityChanges.push(args) })
+city.choose({ detail: { value: [0, 0] } })
+assert.equal(cityChanges[0][1].code, '110100')
+assert.equal(cityChanges[0][1].name, '北京市')
+formAuth.user = null; formAuth.isLoggedIn = false
+await settle()
+assert.equal(secondForm.form.value.name, '', 'Logout must clear the in-memory health draft')
+secondFormScope.stop()
+
+const requestedDays = []
+const weekModules = loader({
+  vue: { ...vue, onMounted() {} },
+  '@/stores/liveWorkspace': { useLiveWorkspaceStore: () => ({ auth: { user: { id: 5 }, isLoggedIn: true }, activeTab: 'plans', selectedPlanTab: 'all' }) },
+  '@/api/archive': { getReminders: async (date) => { requestedDays.push(date); return { groups: { medication: [], followup: [{ id: Number(date.slice(-2)), due_at: `${date} 09:00:00` }], recheck: [] } } } },
+  '@/api/health': { listSchedules: async () => ({ records: [] }) },
+  '@/api/medications': { getMedications: async () => ({ records: [] }) },
+})
+const weekScope = vue.effectScope()
+const week = weekScope.run(() => weekModules('@/components/QLivePlans.vue').default.setup({}, { expose() {} }))
+week.day.value = '2026-12-28'
+await week.load()
+assert.equal(requestedDays.length, 7)
+assert.equal(requestedDays[6], '2027-01-03')
+assert.equal(week.reminders.value.length, 7)
+assert.equal(week.reminders.value[0].due_at, '2026-12-28 09:00:00')
+weekScope.stop()
 class Button { disabled = false; clicks = 0; hasAttribute() { return this.disabled } click() { this.clicks += 1 } }
 const keyboard = loader({}, { HTMLElement: Button })('@/components/buttonKeyboard')
 const control = new Button()

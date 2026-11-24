@@ -15,7 +15,6 @@ export type WorkspaceTab = 'chat' | 'archive' | 'plans'
 interface Message { id: string; role: 'user' | 'assistant'; content: string }
 export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
   const auth = useAuthStore()
-  const screen = ref<'landing' | 'workspace'>('landing')
   const activeTab = ref<WorkspaceTab>('chat')
   const draft = ref('')
   const messages = ref<Message[]>([])
@@ -50,7 +49,7 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
   const activeConversation = computed(() => episodeId.value ? ({ id: String(episodeId.value), title: detail.value?.episode.complaint_text || messages.value.find((item) => item.role === 'user')?.content || '新的问诊' }) : null)
   const recentConversations = computed(() => history.value.map((item) => ({ id: String(item.id), title: item.complaint_excerpt })))
   const readyToSend = computed(() => auth.isLoggedIn && initialized.value && patientProfile.value && patientProfile.value.required_missing.length === 0)
-  function openWorkspace(tab: WorkspaceTab = 'chat') { screen.value = 'workspace'; activeTab.value = tab }
+  function openWorkspace(tab: WorkspaceTab = 'chat') { activeTab.value = tab }
   function newConversation() {
     generation += 1; pending.value = false; messages.value = []; detail.value = null; episodeId.value = null
     questions.value = []; answers.value = {}; error.value = ''; stage.value = ''; lastRequest = null
@@ -60,8 +59,8 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
     openWorkspace()
   }
   function reset() {
-    const previousScreen = screen.value, previousTab = activeTab.value
-    newConversation(); screen.value = previousScreen; activeTab.value = previousTab
+    const previousTab = activeTab.value
+    newConversation(); activeTab.value = previousTab
     history.value = []; historyTotal.value = 0; historyPage.value = 0
     patientProfile.value = null; initialized.value = false; draft.value = ''
     initialization = null
@@ -221,7 +220,7 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
     finally { if (run === generation) pending.value = false }
   }
   watch(() => auth.user?.id, () => { reset(); if (auth.isLoggedIn) void initialize() })
-  return { auth, screen, activeTab, draft, messages, pending, error, stage, patientProfile, detail, result, episodeId,
+  return { auth, activeTab, draft, messages, pending, error, stage, patientProfile, detail, result, episodeId,
     questions, answers, saved, profile, activeConversation, recentConversations, history, historyTotal, historyPage,
     accountOpen, initialized, readyToSend, selectedPlanTab, saveReminder, recheckDate, saveNotice,
     followUpReminder, followUpAnswers, followUpNote, followUpResponse, startFollowUp, submitFollowUp,

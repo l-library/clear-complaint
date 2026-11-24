@@ -294,6 +294,10 @@
 
 `field` 取值固定：`onset_at`、`duration_text`、`site`、`nature`、`associated`、`medications_text`。
 
+`missing_fields` 是尚未回答的公开字段名数组，`unknown_fields` 是明确未知的公开字段名数组，两者不重叠。`questions` 每轮最多 5 项；未容纳的缺项进入后续轮次，包含单独遗漏的 `medications_text`。明确“不清楚／不确定／跳过”等值统一记录为 `unknown`，不重复问，也不当作“没有”。SSE `question` 事件和问诊详情中的 `clarify` 同时返回 `unknown_fields`（无则为空数组）。
+
+`duration_text` 接受“两天”“一周”“3天”“1 周”“1–3 天”等文本。原答案保留，传给平台时仅作等价数字与空格规范化，区间仍保持区间。时长格式不得直接触发 `insufficient_evidence`；后者仅表示检索无可用来源，字段状态与平台字段名转换详见 `api-agentarts.md` 16.3.4.1。
+
 ### 2.13 随访补充清单（Supplement）
 
 ```json
@@ -355,7 +359,7 @@
 返回当前隐私政策版本与链接，无需鉴权。注册前用它取 `consent_version`。
 
 ```json
-{ "current_version": "2026-11-01", "policy_url": "https://example.com/privacy", "sensitive_policy_url": "https://example.com/privacy/sensitive" }
+{ "current_version": "2026-11-01", "policy_url": "/#/pages/privacy/index?section=privacy", "sensitive_policy_url": "/#/pages/privacy/index?section=sensitive" }
 ```
 
 ## 4. 认证

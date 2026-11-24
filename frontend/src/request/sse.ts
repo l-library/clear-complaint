@@ -44,7 +44,7 @@ async function streamH5(options: StreamOptions, onEvent: (event: SseEvent) => vo
   } catch (cause) {
     if (cause instanceof ApiError) throw cause
     if (cause instanceof Error && cause.name === 'AbortError') throw new ApiError(-1, '问诊连接超时，请恢复记录或重试。')
-    throw cause instanceof Error ? cause : new ApiError(-1, '无法连接后端。')
+    throw cause instanceof Error ? cause : new ApiError(-1, '暂时无法连接，请稍后重试。')
   } finally { clearTimeout(timer); if (reader) { try { await reader.cancel() } catch { /* The response may already be closed. */ } } controller.abort() }
 }
 // #endif
@@ -67,7 +67,7 @@ function streamUni(options: StreamOptions, onEvent: (event: SseEvent) => void): 
         if (!received) consume(text)
         if (!settled) { try { process.consume(decode(new Uint8Array(), true)); process.finish(); finish() } catch (cause) { finish(cause) } }
       },
-      fail: () => finish(new ApiError(-1, '无法连接本机后端，请确认服务已启动后重试。')),
+      fail: () => finish(new ApiError(-1, '暂时无法连接，请稍后重试。')),
     }) as unknown as typeof task
     task?.onChunkReceived?.((event) => { if (!settled) { received = true; consume(decode(new Uint8Array(event.data))) } })
   })

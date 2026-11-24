@@ -41,8 +41,8 @@ class Settings(BaseSettings):
 
     # 隐私政策版本与链接：GET /api/meta/privacy 返回，注册时校验 consent_version
     privacy_version: str = "2026-11-01"
-    privacy_policy_url: str = "https://example.com/privacy"
-    sensitive_policy_url: str = "https://example.com/privacy/sensitive"
+    privacy_policy_url: str = "/#/pages/privacy/index?section=privacy"
+    sensitive_policy_url: str = "/#/pages/privacy/index?section=sensitive"
 
 
 @lru_cache

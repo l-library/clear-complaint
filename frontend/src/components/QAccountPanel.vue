@@ -9,12 +9,7 @@
       <view v-if="mode === 'register'">
         <checkbox-group @change="privacyAccepted = $event.detail.value.includes('privacy')"><label class="live-check"><checkbox value="privacy" :checked="privacyAccepted" /><text>我已阅读并同意隐私政策</text></label></checkbox-group>
         <checkbox-group @change="sensitiveAccepted = $event.detail.value.includes('sensitive')"><label class="live-check"><checkbox value="sensitive" :checked="sensitiveAccepted" /><text>我同意为健康服务处理我提交的敏感个人信息</text></label></checkbox-group>
-        <!-- #ifdef H5 -->
-        <view v-if="privacy" class="policy-links"><a :href="privacy.policy_url" target="_blank" rel="noopener noreferrer">隐私政策</a><a :href="privacy.sensitive_policy_url" target="_blank" rel="noopener noreferrer">敏感信息说明</a></view>
-        <!-- #endif -->
-        <!-- #ifndef H5 -->
-        <view v-if="privacy" class="live-actions"><button class="live-link" @click="copyPolicy(false)">复制隐私政策地址</button><button class="live-link" @click="copyPolicy(true)">复制敏感信息说明地址</button></view>
-        <!-- #endif -->
+        <view class="policy-links"><button role="button" tabindex="0" @keydown="activateButton" class="live-link" @click="openPolicy(false)">隐私说明</button><button role="button" tabindex="0" @keydown="activateButton" class="live-link" @click="openPolicy(true)">敏感信息说明</button></view>
         <text v-if="!privacy" class="live-muted">隐私政策未加载，暂不能注册。</text><button v-if="!privacy" role="button" tabindex="0" @keydown="activateButton" class="live-link" @click="loadPrivacy">重新读取隐私政策</button>
       </view>
       <button role="button" tabindex="0" @keydown="activateButton" class="live-primary login-button" :disabled="busy || auth.loading || (mode === 'register' && !privacy)" @click="authenticate">{{ mode === 'login' ? '登录' : '注册账户' }}</button>
@@ -26,8 +21,7 @@
         <view class="live-full"><label class="live-label" for="profile-name">称呼</label><input id="profile-name" v-model="form.name" class="live-input" maxlength="40" /></view>
         <view><text class="live-label">出生日期 *</text><picker mode="date" :value="form.birth_date" :end="today" @change="form.birth_date = String($event.detail.value)"><view class="live-select">{{ form.birth_date || '选择日期' }}</view></picker></view>
         <view><text class="live-label">性别 *</text><picker :range="sexLabels" :value="sexIndex" @change="form.sex = sexes[Number($event.detail.value)]"><view class="live-select">{{ sexIndex < 0 ? '请选择' : sexLabels[sexIndex] }}</view></picker></view>
-        <view><label class="live-label" for="city-code">城市代码</label><input id="city-code" v-model="form.city_code" class="live-input" maxlength="20" placeholder="如 110100" /></view>
-        <view><label class="live-label" for="city-name">城市名称</label><input id="city-name" v-model="form.city_name" class="live-input" maxlength="40" /></view>
+        <QCityPicker class="live-full" :code="form.city_code" :name="form.city_name" @change="form.city_code = $event.code; form.city_name = $event.name" />
         <view class="live-full"><text class="live-label">既往情况</text><picker :range="factLabels" :value="form.conditionState" @change="form.conditionState = Number($event.detail.value)"><view class="live-select">{{ factLabels[form.conditionState] }}</view></picker><input v-if="form.conditionState === 2" v-model="form.conditions" class="live-input fact-input" aria-label="既往情况，使用逗号分隔" placeholder="使用逗号分隔" /></view>
         <view class="live-full"><text class="live-label">过敏情况</text><picker :range="factLabels" :value="form.allergyState" @change="form.allergyState = Number($event.detail.value)"><view class="live-select">{{ factLabels[form.allergyState] }}</view></picker><input v-if="form.allergyState === 2" v-model="form.allergies" class="live-input fact-input" aria-label="过敏情况，使用逗号分隔" placeholder="使用逗号分隔" /></view>
         <view class="live-full"><label class="live-label" for="condition-note">既往情况备注（选填）</label><textarea id="condition-note" v-model="form.condition_note" class="live-textarea" maxlength="1000" /></view>
@@ -50,7 +44,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import QCityPicker from '@/components/QCityPicker.vue'
+import { useProfileDraftStore } from '@/stores/profileDraft'
 import { activateButton } from '@/components/buttonKeyboard'
 import { useAuthStore } from '@/stores/auth'
 import { useLiveWorkspaceStore } from '@/stores/liveWorkspace'
@@ -63,22 +60,20 @@ import { getApiBaseUrl } from '@/request'
 const auth = useAuthStore()
 const workspace = useLiveWorkspaceStore()
 const modes = [{ id: 'login', title: '登录' }, { id: 'register', title: '注册' }]
-const mode = ref('login'), phone = ref(''), password = ref(''), busy = ref(false), error = ref(''), notice = ref('')
+const mode = ref('login'), phone = ref(''), password = ref('')
+const editor = useProfileDraftStore()
+const { form, busy, error, notice, editing } = storeToRefs(editor)
 const privacy = ref<PrivacyMeta | null>(null), consent = ref<ConsentRecord | null>(null)
 const privacyAccepted = ref(false), sensitiveAccepted = ref(false), dangerOpen = ref(false), confirmation = ref(''), downloadUrl = ref('')
-const editing = ref(false)
 const sexes: Sex[] = ['male', 'female', 'undisclosed'], sexLabels = ['男', '女', '不便透露'], factLabels = ['未告知', '明确没有', '填写已知情况']
 const today = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10)
-const form = reactive({ name: '', birth_date: '', sex: '' as Sex | '', city_code: '', city_name: '', conditions: '', allergies: '', condition_note: '', allergy_note: '', conditionState: 0, allergyState: 0 })
-const sexIndex = computed(() => sexes.indexOf(form.sex as Sex))
-watch(() => workspace.patientProfile, (profile) => {
-  Object.assign(form, { name: profile?.name || '', birth_date: profile?.birth_date || '', sex: profile?.sex || '', city_code: profile?.city_code || '', city_name: profile?.city_name || '', conditions: profile?.conditions?.join('、') || '', allergies: profile?.allergies?.join('、') || '', condition_note: profile?.condition_note || '', allergy_note: profile?.allergy_note || '', conditionState: profile?.conditions == null ? 0 : profile.conditions.length ? 2 : 1, allergyState: profile?.allergies == null ? 0 : profile.allergies.length ? 2 : 1 })
-}, { immediate: true })
+const sexIndex = computed(() => sexes.indexOf(form.value.sex as Sex))
+watch(() => workspace.patientProfile, (profile) => editor.hydrate(profile), { immediate: true })
 watch(() => auth.user?.id, () => { password.value = ''; consent.value = null; downloadUrl.value = ''; confirmation.value = ''; notice.value = ''; editing.value = false; void loadConsent() })
 async function loadConsent() { const owner = auth.user?.id; if (auth.isLoggedIn) { try { const record = await getConsentRecord(); if (owner === auth.user?.id) consent.value = record } catch (cause) { if (owner === auth.user?.id) error.value = cause instanceof Error ? cause.message : '隐私记录读取失败' } } }
-async function loadPrivacy() { error.value = ''; try { privacy.value = await getPrivacyMeta() } catch (cause) { error.value = cause instanceof Error ? cause.message : '后端连接失败' } }
+async function loadPrivacy() { if (!editor.dirty) error.value = ''; try { privacy.value = await getPrivacyMeta() } catch (cause) { error.value = cause instanceof Error ? cause.message : '暂时无法连接，请稍后重试' } }
 onMounted(async () => { await loadPrivacy(); await loadConsent() })
-async function perform(action: () => Promise<void>) { if (busy.value) return; busy.value = true; error.value = ''; notice.value = ''; try { await action() } catch (cause) { error.value = cause instanceof Error ? cause.message : '操作失败，请重试。' } finally { busy.value = false } }
+async function perform(action: () => Promise<void>) { if (busy.value) return; const owner = auth.user?.id; busy.value = true; error.value = ''; notice.value = ''; try { await action() } catch (cause) { if (owner === auth.user?.id) error.value = cause instanceof Error ? cause.message : '操作失败，请重试。' } finally { if (!owner || owner === auth.user?.id) busy.value = false } }
 function authenticate() { void perform(async () => {
   if (!/^\d{11}$/.test(phone.value)) throw new Error('手机号须为 11 位数字。')
   if (mode.value === 'register') {
@@ -89,21 +84,24 @@ function authenticate() { void perform(async () => {
 }) }
 const facts = (state: number, value: string) => state === 0 ? null : state === 1 ? [] : value.split(/[、,，\n]/).map((item) => item.trim()).filter(Boolean)
 function saveProfile() { void perform(async () => {
-  if (!form.birth_date || !form.sex) throw new Error('请填写出生日期和性别。')
-  if ((form.conditionState === 2 && !form.conditions.trim()) || (form.allergyState === 2 && !form.allergies.trim())) throw new Error('请填写已知情况，或选择未告知／明确没有。')
+  const draft = form.value
+  if (!draft.birth_date || !draft.sex) throw new Error('请填写出生日期和性别。')
+  if ((draft.conditionState === 2 && !draft.conditions.trim()) || (draft.allergyState === 2 && !draft.allergies.trim())) throw new Error('请填写已知情况，或选择未告知／明确没有。')
   const owner = auth.user?.id
-  const profile = await updateProfile({ name: form.name, birth_date: form.birth_date, sex: form.sex, city_code: form.city_code, city_name: form.city_name, conditions: facts(form.conditionState, form.conditions), allergies: facts(form.allergyState, form.allergies), condition_note: form.condition_note, allergy_note: form.allergy_note })
+  const submitted = JSON.stringify(draft)
+  const profile = await updateProfile({ name: draft.name, birth_date: draft.birth_date, sex: draft.sex, city_code: draft.city_code || null, city_name: draft.city_name || null, conditions: facts(draft.conditionState, draft.conditions), allergies: facts(draft.allergyState, draft.allergies), condition_note: draft.condition_note, allergy_note: draft.allergy_note })
   if (owner !== auth.user?.id) return
   workspace.patientProfile = profile
-  auth.updateProfileComplete(workspace.patientProfile.required_missing.length === 0); notice.value = '账户档案已保存。'; workspace.error = ''; editing.value = false
+  editor.accept(profile, submitted)
+  auth.updateProfileComplete(workspace.patientProfile.required_missing.length === 0); notice.value = editor.dirty ? '已保存，当前还有未保存的修改。' : '账户档案已保存。'; workspace.error = ''
 }) }
 function exportData() { void perform(async () => { const owner = auth.user?.id; const result = await exportAccountData(); if (owner !== auth.user?.id) return; if (!result.url.startsWith('/api/export/')) throw new Error('导出地址格式不正确。'); downloadUrl.value = result.url; notice.value = `有效期至 ${result.expires_at}` }) }
-function copyPolicy(sensitive: boolean) { const url = sensitive ? privacy.value?.sensitive_policy_url : privacy.value?.policy_url; if (url) uni.setClipboardData({ data: url }) }
+function openPolicy(sensitive: boolean) { uni.navigateTo({ url: `/pages/privacy/index?section=${sensitive ? 'sensitive' : 'privacy'}` }) }
 function copyDownload() { const base = getApiBaseUrl().replace(/\/api\/?$/, ''); uni.setClipboardData({ data: `${base}${downloadUrl.value}` }) }
 function signOut() { void perform(async () => { await auth.logout(); notice.value = '已退出登录。' }) }
 function confirmDestruction(removeAccount: boolean) {
   if (confirmation.value !== '删除') return
-  uni.showModal({ title: removeAccount ? '永久注销账户？' : '永久清空健康数据？', content: '此操作会删除服务器中的相关数据，无法恢复。', confirmText: '确认删除', success: (answer) => { if (answer.confirm) void perform(async () => { if (removeAccount) { await deleteAccount(); auth.clearLocalSession() } else { await clearAccountData(); workspace.reset(); await workspace.initialize(true) } confirmation.value = ''; dangerOpen.value = false; notice.value = '操作已完成。' }) } })
+  uni.showModal({ title: removeAccount ? '永久注销账户？' : '永久清空健康数据？', content: '此操作会删除账户中的相关数据，无法恢复。', confirmText: '确认删除', success: (answer) => { if (answer.confirm) void perform(async () => { if (removeAccount) { await deleteAccount(); auth.clearLocalSession() } else { await clearAccountData(); workspace.reset(); await workspace.initialize(true) } confirmation.value = ''; dangerOpen.value = false; notice.value = '操作已完成。' }) } })
 }
 </script>
 

@@ -6,12 +6,18 @@
 
 | 页面 | 路由 | 可选参数 |
 | --- | --- | --- |
-| 首页 | `/pages/index/index` | 无 |
+| 默认入口（跳转到 AI 对话） | `/pages/index/index` | 无 |
 | AI 对话 | `/pages/chat/index` | `conversation_id`；随访使用 `reminder_id` 和 `date` |
 | 健康档案 | `/pages/health-records/index` | 无 |
 | 健康计划 | `/pages/health-plans/index` | `tab=all`、`tab=follow_up` 或 `tab=medication` |
 
 H5 默认使用 hash 路由，例如 `/#/pages/health-plans/index`。页面共用 `QWorkspace.vue`，桌面保留左侧导航、聊天和右侧账户面板；手机使用底部导航，最近问诊从顶部时钟按钮打开。
+
+入口统一为中文对话首页，原英文落地页及专用状态、样式已移除。隐私与敏感信息说明使用 `/pages/privacy/index?section=privacy|sensitive` 站内页面，服务主体和联系方式待补充。
+
+档案草稿由 `stores/profileDraft.ts` 在当前登录会话的内存中保留，关闭弹窗或保存失败不会清空，退出或切换账户时清除；不写入本机持久化存储。未选择城市时成对提交 `null`，不会触发行政区码校验。城市选择数据冻结自 [Administrative-divisions-of-China](https://github.com/modood/Administrative-divisions-of-China) 的 `pc-code.json`，直辖市合并到市级；名称和代码一起提交。
+
+健康计划默认查询今天起连续 7 天的真实提醒并排序，不生成虚构提醒；可选择其他起始日。档案概览提供身高与体重的直接录入按钮。
 
 ## 实现与数据来源
 
