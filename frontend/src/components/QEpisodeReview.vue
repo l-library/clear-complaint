@@ -22,7 +22,6 @@
       </view>
     </template>
     <text v-else class="live-muted">{{ pending ? '正在等待本次问诊的整理结果…' : '问诊整理信息将在这里显示。' }}</text>
-    <view class="review-section planned-features"><text class="live-muted">约束详情、纠偏评分与前后效果对比待接入。</text></view>
   </view>
 </template>
 
@@ -54,5 +53,4 @@ const hasGate = computed(() => Boolean(gate.value && Object.keys(gate.value).len
 .verification-row { display: flex; justify-content: space-between; gap: 15px; padding: 10px 0; border-bottom: 1px solid var(--glass-rule, #deded7); }
 .red-flag-list { margin-top: 15px; }
 .red-flag { display: block; margin-top: 8px; color: #a14136; }
-.planned-features { padding-top: 18px; border-top: 1px solid var(--glass-rule, #deded7); }
 </style>

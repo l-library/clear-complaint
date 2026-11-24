@@ -237,7 +237,7 @@ const reviewHtml = await renderComponent('QEpisodeReview', reviewProps)
 assert.match(reviewHtml, /SYNTHETIC ATTRIBUTION/)
 assert.match(reviewHtml, /SYNTHETIC FLAG/)
 assert.match(reviewHtml, /本人暂不确定/)
-assert.match(reviewHtml, /约束详情、纠偏评分与前后效果对比待接入/)
+assert.doesNotMatch(reviewHtml, /待接入|待补充/)
 reviewProps.detail = null
 assert.equal(review.fields.value.length, 0)
 assert.equal(review.hasGate.value, false)

@@ -15,7 +15,7 @@
         <text class="policy-heading">保存与管理</text><text class="policy-copy">账户和健康记录保存在清诉服务中；登录状态保存在你使用的设备上。未保存的问诊有有效期，到期会按清理规则删除。你可以在账户信息中导出、清空健康数据或注销账户，也可以在健康档案中删除单条记录。退出登录会清除本设备的登录状态。</text>
         <text class="policy-heading">可选信息</text><text class="policy-copy">城市等标注为选填的信息可留空。出生日期和性别用于问诊所需的基本档案。选择“不确定”或“未告知”不会被当成明确没有相关情况。</text>
       </template>
-      <text class="policy-heading">服务主体与联系信息</text><text class="policy-copy">待补充。</text>
+      <text class="policy-heading">服务主体与联系信息</text><text class="policy-copy">本说明当前由清诉项目组维护，尚未对外提供服务。正式启用前，这里会写明运营主体与联系方式；启用之前请勿在服务中填写真实健康信息。</text>
     </view>
   </view>
 </template>

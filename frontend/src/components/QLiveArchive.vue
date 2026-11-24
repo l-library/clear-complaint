@@ -14,7 +14,6 @@
         <text v-if="!episodes.length && !loading" class="live-muted">暂无问诊记录。</text>
         <view v-for="record in episodes" :key="record.id" class="live-list-row"><view class="live-row"><view><text class="live-preserve">{{ record.complaint_excerpt }}</text><text class="live-muted">{{ record.created_at }} · {{ record.saved_at ? '已归档' : '未归档' }}<text v-if="record.triage_label"> · {{ record.triage_label }}</text></text></view><text class="live-pill">{{ statusLabel(record.status) }}</text></view><view class="live-actions"><button role="button" tabindex="0" @keydown="activateButton" class="live-link" @click="$emit('open-conversation', String(record.id))">查看问诊与依据</button><button role="button" tabindex="0" @keydown="activateButton" class="live-link" :disabled="busy" @click="remove('episode', record.id)">删除记录</button></view></view>
         <button v-if="episodes.length < episodeTotal" role="button" tabindex="0" @keydown="activateButton" class="live-secondary" :disabled="loading" @click="moreEpisodes">加载更多</button>
-        <text class="live-muted import-note">病历上传 / OCR · 待接入</text>
       </view>
       <template v-if="active === 'vitals'">
         <view class="live-row"><text class="live-subtitle">体征记录</text><button role="button" tabindex="0" @keydown="activateButton" class="live-primary" @click="newVital()">添加体征</button></view>
@@ -132,7 +131,6 @@ function vitalText(item: VitalRecord) { return item.kind === 'bp' ? `血压 ${it
 .overview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; margin-top: 22px; }
 .overview-grid > view { min-width: 0; }
 .overview-grid text { display: block; }
-.import-note { margin-top: 24px; padding-top: 16px; border-top: 1px solid #ededE8; }
 .record-filters { display: flex; flex-wrap: wrap; gap: 14px; margin: 18px 0 24px; }
 .record-filters > view { flex: 1 1 180px; max-width: 280px; }
 @media (max-width: 760px) { .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; } }

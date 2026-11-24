@@ -35,7 +35,7 @@
         </template>
       </view>
       <text v-if="workspace.saveNotice" class="live-notice" role="status">{{ workspace.saveNotice }}</text>
-      <text class="live-muted">连续追问 · 待接入。继续输入新的不适会开始一份新问诊，当前记录可在历史中回看。</text>
+      <text class="live-muted">继续输入新的不适会开始一份新问诊，当前记录可在历史中回看。</text>
     </view>
     <view v-if="workspace.error && !workspace.pending" class="live-actions"><button role="button" tabindex="0" @keydown="activateButton" class="live-secondary" @click="workspace.retry">重试／恢复问诊</button></view>
   </view>
