@@ -1,0 +1,5 @@
+{
+  "inputs": {
+    "request_json": "{\"schema_version\": \"clear-complaint.triage.request.v1\", \"episode_id\": \"SYNTHETIC-TRIAGE-FLOW-001\", \"request_id\": \"SYNTHETIC-T04-20261124\", \"episode_status\": \"generating\", \"complaint_text\": \"【软件合成测试】两天前开始流鼻涕，鼻部清水样鼻涕持续两天，偶尔打喷嚏，没用药。\", \"normalized\": {\"symptom\": \"流鼻涕\", \"onset\": \"两天前\", \"duration\": \"两天\", \"location\": \"鼻部\", \"character\": \"清水样鼻涕\", \"associated_symptoms\": [\"偶尔打喷嚏\"], \"medication\": \"没用药\"}, \"self_attribution\": [], \"profile_snapshot\": {\"age\": 28, \"sex\": \"female\", \"conditions\": [], \"condition_note\": \"\", \"allergies\": [\"无已知过敏史\"], \"allergy_note\": \"\"}, \"vitals_snapshot\": {}, \"env\": {}, \"clarification\": {\"round\": 0, \"round_limit\": 5, \"skipped\": false}, \"red_flags\": {\"checked\": true, \"version\": 1, \"matched_rule_ids\": []}}"
+  }
+}

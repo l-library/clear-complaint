@@ -12,6 +12,8 @@ onHide(() => {
 </script>
 <style>
 @import './styles/workspace.css';
+/* Noto Serif SC heading subset: consistent weight without remote loading; license in static/fonts/OFL.txt. */
+@font-face { font-family: 'ClearComplaint Display'; src: url('./static/fonts/clearcomplaint-display.woff2') format('woff2'); font-style: normal; font-weight: 600; font-display: swap; }
 page { background: #fdfdf7; color: #1b1b18; font-family: Arial, -apple-system, BlinkMacSystemFont, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif; font-size: 16px; }
 button { font-family: inherit; cursor: pointer; }
 button::after { border: 0; }

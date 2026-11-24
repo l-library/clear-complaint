@@ -4,8 +4,12 @@
       "path": "pages/index/index",
       "style": {
         "navigationStyle": "custom",
-        "navigationBarTitleText": "ClearComplaint · 清诉"
+        "navigationBarTitleText": "清诉"
       }
+    },
+    {
+      "path": "pages/privacy/index",
+      "style": { "navigationStyle": "custom", "navigationBarTitleText": "清诉 · 隐私说明" }
     },
     {
       "path": "pages/chat/index",

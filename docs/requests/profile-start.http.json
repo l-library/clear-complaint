@@ -1,0 +1,5 @@
+{
+  "inputs": {
+    "request_json": "{\"schema_version\": \"clear-complaint.profile-intake.request.v1\", \"session_id\": \"SYNTHETIC-PROFILE-001\", \"request_id\": \"SYNTHETIC-P01-20261124\", \"action\": \"start\", \"as_of_date\": \"2026-11-24\", \"form_snapshot\": {}, \"medication_drafts\": null, \"active_field\": null, \"user_input\": \"\", \"skipped_fields\": [], \"unknown_fields\": [], \"required_fields\": [\"birth_date\", \"sex\"]}"
+  }
+}

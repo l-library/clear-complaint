@@ -40,10 +40,10 @@ class Settings(BaseSettings):
     export_dir: str = ""
 
     # 隐私政策版本与链接：GET /api/meta/privacy 返回，注册时校验 consent_version。
-    # 链接默认为空：没配置就不给假地址，由前端隐藏入口；真实地址经环境变量注入
+    # 默认使用已交付的前端站内说明页；部署可经环境变量覆盖或显式留空
     privacy_version: str = "2026-11-01"
-    privacy_policy_url: str = ""
-    sensitive_policy_url: str = ""
+    privacy_policy_url: str = "/#/pages/privacy/index?section=privacy"
+    sensitive_policy_url: str = "/#/pages/privacy/index?section=sensitive"
 
 
 @lru_cache
