@@ -302,6 +302,8 @@ watch([messageCount, pending, activeTab, () => activeConversation.value?.id], as
 <style scoped>
 .app-shell {
   --u: .039078vw;
+  --font-display: 'ClearComplaint Display', 'Noto Serif SC', 'Source Han Serif SC', 'STZhongsong', 'Songti SC', serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   --ink: #1b1b18;
   --muted: #767674;
   --accent: #2463eb;
@@ -316,10 +318,11 @@ watch([messageCount, pending, activeTab, () => activeConversation.value?.id], as
   min-height: 100vh;
   min-height: 100dvh;
   color: var(--ink);
+  font-family: var(--font-ui);
   background: #fdfdf7;
 }
 .landing-header { height: max(76px, calc(102 * var(--u))); padding: 0 5.8vw; display: flex; align-items: center; justify-content: space-between; box-sizing: border-box; }
-.wordmark { display: flex; align-items: center; gap: 8px; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(22px, calc(34 * var(--u)), 40px); letter-spacing: -1px; }
+.wordmark { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-size: clamp(22px, calc(34 * var(--u)), 40px); font-weight: 600; line-height: 1.3; letter-spacing: .04em; }
 .brand-mark { width: max(30px, calc(36 * var(--u))); height: max(26px, calc(36 * var(--u))); flex-shrink: 0; }
 .header-actions { display: flex; align-items: center; gap: max(9px, calc(14 * var(--u))); }
 .text-button { margin: 0; padding: 0 17px; border: 1px solid #d1d1ca; border-radius: 30px; background: transparent; font-size: clamp(13px, calc(18 * var(--u)), 20px); line-height: max(38px, calc(52 * var(--u))); color: var(--ink); }
@@ -333,12 +336,12 @@ watch([messageCount, pending, activeTab, () => activeConversation.value?.id], as
 .landing-main { padding-top: max(35px, calc(19.95vh - max(76px, calc(102 * var(--u))))); padding-bottom: 110px; }
 .landing-intro { text-align: center; }
 .hero-mark { width: calc(115 * var(--u)); height: calc(96 * var(--u)); margin: 0 auto calc(20 * var(--u)); animation: reveal .45s ease both; }
-.landing-title { font-family: Georgia, 'Times New Roman', serif; font-size: clamp(38px, calc(74 * var(--u)), 86px); font-weight: 400; line-height: 1.18; letter-spacing: -1.8px; animation: reveal .55s ease both; }
+.landing-title { font-family: var(--font-display); font-size: clamp(40px, calc(82 * var(--u)), 92px); font-weight: 600; line-height: 1.15; letter-spacing: .025em; animation: reveal .55s ease both; }
 .name-accent { border-bottom: max(2px, calc(5 * var(--u))) dashed #b8dcb9; padding-bottom: 1px; }
-.intro-copy, .intro-detail { display: block; width: 29vw; max-width: 800px; min-width: 340px; margin: max(20px, calc(28 * var(--u))) auto 0; font-size: clamp(14px, calc(21 * var(--u)), 25px); color: var(--muted); line-height: 1.5; animation: reveal .55s .1s ease both; }
+.intro-copy, .intro-detail { display: block; width: 29vw; max-width: 800px; min-width: 340px; margin: max(20px, calc(24 * var(--u))) auto 0; font-size: clamp(15px, calc(22 * var(--u)), 25px); font-weight: 500; color: #676762; line-height: 1.65; letter-spacing: .015em; animation: reveal .55s .1s ease both; }
 .strong { color: #5d5d59; font-weight: 600; }
-.intro-detail { margin-top: max(15px, calc(20 * var(--u))); animation-delay: .18s; }
-.landing-composer { --composer-height: calc(222 * var(--u)); width: 32.36vw; min-width: 420px; max-width: 1050px; margin: max(42px, calc(68 * var(--u))) auto 0; animation: reveal .55s .24s ease both; }
+.intro-detail { margin-top: max(14px, calc(16 * var(--u))); animation-delay: .18s; }
+.landing-composer { --composer-height: calc(222 * var(--u)); width: 32.36vw; min-width: 420px; max-width: 1050px; margin: max(40px, calc(60 * var(--u))) auto 0; animation: reveal .55s .24s ease both; }
 .composer-footnote { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-top: max(13px, calc(20 * var(--u))); font-size: clamp(11px, calc(14 * var(--u)), 16px); color: var(--muted); }
 .composer-footnote > view { display: flex; align-items: center; gap: 7px; }
 .composer-footnote .q-icon { width: 17px; height: 17px; opacity: .6; }
@@ -392,7 +395,7 @@ watch([messageCount, pending, activeTab, () => activeConversation.value?.id], as
 .empty-chat { box-sizing: border-box; min-height: 100vh; min-height: 100dvh; padding: 19.95vh 24px 80px; text-align: center; }
 .chat-welcome { display: flex; flex-direction: column; align-items: center; }
 .welcome-mark { display: block; width: calc(115 * var(--u)); height: calc(96 * var(--u)); animation: reveal .45s ease both; }
-.welcome-title { margin-top: calc(20 * var(--u)); font-family: Georgia, 'Times New Roman', serif; font-size: clamp(30px, calc(64 * var(--u)), 80px); font-weight: 400; line-height: 1.2; letter-spacing: -.9px; animation: reveal .5s .07s ease both; }
+.welcome-title { margin-top: calc(20 * var(--u)); font-family: var(--font-display); font-size: clamp(30px, calc(64 * var(--u)), 80px); font-weight: 600; line-height: 1.25; letter-spacing: .015em; animation: reveal .5s .07s ease both; }
 .chat-entry-composer { --composer-height: calc(187 * var(--u)); width: 38.22vw; max-width: 1220px; min-width: 470px; margin: calc(32 * var(--u)) auto 0; text-align: left; animation: reveal .5s .14s ease both; }
 .record-connector { display: flex; align-items: flex-start; justify-content: space-between; width: 100%; height: max(40px, calc(80 * var(--u))); margin: 0 0 calc(-27 * var(--u)); padding: max(10px, calc(17 * var(--u))) max(12px, calc(20 * var(--u))); border: 1px solid var(--line); border-bottom: 0; border-radius: max(16px, calc(24 * var(--u))) max(16px, calc(24 * var(--u))) 0 0; box-sizing: border-box; background: var(--surface-soft); color: var(--ink); text-align: left; font-size: clamp(11px, calc(20 * var(--u)), 24px); line-height: 1.4; }
 .record-connector .q-icon { width: max(18px, calc(24 * var(--u))); height: max(18px, calc(24 * var(--u))); }
@@ -501,7 +504,7 @@ button:active { transform: scale(.97); }
   .icon-button { width: 34px; height: 36px; }
   .landing-main { padding-top: 8vh; padding-bottom: 110px; }
   .hero-mark { margin-bottom: 20px; }
-  .landing-title { padding: 0 25px; font-size: 38px; letter-spacing: -1.2px; }
+  .landing-title { padding: 0 20px; font-size: clamp(30px, 8.6vw, 38px); line-height: 1.3; letter-spacing: .01em; }
   .intro-copy, .intro-detail { width: calc(100% - 64px); font-size: 14px; }
   .intro-detail { margin-top: 16px; }
   .landing-composer { width: calc(100% - 40px); margin-top: 40px; --composer-height: 185px; }
@@ -510,13 +513,13 @@ button:active { transform: scale(.97); }
   .sidebar { display: none; }
   .chat-mobile-toolbar { display: flex; height: 60px; align-items: center; justify-content: space-between; gap: 10px; padding: 0 20px; }
   .chat-mobile-toolbar > view { display: flex; gap: 4px; }
-  .mobile-home { display: flex; align-items: center; gap: 6px; margin: 0; padding: 0; background: transparent; font-family: Georgia, 'Times New Roman', serif; font-size: 19px; line-height: 1.5; }
+  .mobile-home { display: flex; align-items: center; gap: 6px; margin: 0; padding: 0; background: transparent; font-family: var(--font-display); font-size: 19px; font-weight: 600; line-height: 1.5; }
   .mobile-home image { width: 28px; height: 24px; }
   .workspace-main { width: 100%; margin-left: 0; padding-bottom: calc(67px + env(safe-area-inset-bottom)); }
   .workspace-header { height: 68px; padding: 0 20px; }
   .mobile-history-button { display: flex; }
   .empty-chat { min-height: calc(100dvh - 127px); padding: 8vh 20px 55px; }
-  .welcome-title { margin-top: 20px; max-width: 330px; font-size: 34px; letter-spacing: -.8px; }
+  .welcome-title { margin-top: 20px; max-width: 100%; font-size: clamp(24px, 7.1vw, 32px); line-height: 1.3; letter-spacing: .01em; }
   .hero-mark, .welcome-mark { width: 78px; height: 65px; }
   .chat-entry-composer { width: 100%; margin-top: 32px; --composer-height: 172px; }
   .record-connector { font-size: 13px; }

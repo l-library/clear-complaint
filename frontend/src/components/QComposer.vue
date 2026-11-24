@@ -85,7 +85,7 @@ defineExpose({ focus })
 .composer { display: flex; flex-direction: column; height: var(--composer-height, 190px); min-height: 94px; box-sizing: border-box; padding: max(12px, calc(24 * var(--u, 1px))); border: 1px solid #e9e9e4; border-radius: max(16px, calc(24 * var(--u, 1px))); background: #fff; box-shadow: 0 8px 36px #1b1b1806; transition: border-color .18s, box-shadow .18s; }
 .composer:focus-within { border-color: #4b85ff; box-shadow: 0 0 0 2px #2463eb20, 0 8px 36px #1b1b1806; }
 .composer-invalid { border-color: #b54a3e; }
-.message-input { flex: 1; width: 100%; height: 0; min-height: 25px; color: #1b1b18; font-family: Arial, 'Noto Sans SC', sans-serif; font-size: clamp(14px, calc(22 * var(--u, 1px)), 26px); line-height: 1.6; }
+.message-input { flex: 1; width: 100%; height: 0; min-height: 25px; color: #1b1b18; font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif); font-size: clamp(14px, calc(22 * var(--u, 1px)), 26px); line-height: 1.6; }
 .message-input :deep(textarea) { padding: 0; outline: 0; }
 .message-input :deep(textarea:focus-visible) { outline: 0; }
 .message-input :deep(.uni-textarea-placeholder) { color: #767674; }
