@@ -12,8 +12,11 @@ export const useProfileDraftStore = defineStore('profile-draft', () => {
   const auth = useAuthStore()
   const form = reactive(emptyForm())
   const baseline = ref(JSON.stringify(form))
+  const measurements = reactive({ height_cm: '', weight_kg: '' })
+  const savedMeasurements = reactive({ height_cm: '', weight_kg: '' })
+  const measurementsLoaded = ref(false)
   const editing = ref(false), busy = ref(false), error = ref(''), notice = ref('')
-  const dirty = computed(() => JSON.stringify(form) !== baseline.value)
+  const dirty = computed(() => JSON.stringify(form) !== baseline.value || JSON.stringify(measurements) !== JSON.stringify(savedMeasurements))
   function hydrate(profile: Profile | null) {
     if (dirty.value) return
     Object.assign(form, fromProfile(profile)); baseline.value = JSON.stringify(form)
@@ -24,9 +27,26 @@ export const useProfileDraftStore = defineStore('profile-draft', () => {
     if (JSON.stringify(form) === submitted) Object.assign(form, saved)
     baseline.value = JSON.stringify(saved); editing.value = dirty.value
   }
-  watch(() => auth.user?.id, () => {
+  function hydrateMeasurements(vitals: { latest_height_cm: number | null; latest_weight_kg: number | null }) {
+    for (const key of ['height_cm', 'weight_kg'] as const) {
+      const value = vitals[`latest_${key}`]
+      const saved = value == null ? '' : String(value)
+      if (measurements[key] === savedMeasurements[key]) measurements[key] = saved
+      savedMeasurements[key] = saved
+    }
+    measurementsLoaded.value = true
+  }
+  function acceptMeasurement(key: 'height_cm' | 'weight_kg', value: number, submitted: string) {
+    const saved = String(value)
+    if (measurements[key] === submitted) measurements[key] = saved
+    savedMeasurements[key] = saved; editing.value = dirty.value
+  }
+  function reset() {
     Object.assign(form, emptyForm()); baseline.value = JSON.stringify(form)
+    Object.assign(measurements, { height_cm: '', weight_kg: '' })
+    Object.assign(savedMeasurements, { height_cm: '', weight_kg: '' }); measurementsLoaded.value = false
     editing.value = false; busy.value = false; error.value = ''; notice.value = ''
-  })
-  return { form, editing, busy, error, notice, dirty, hydrate, accept }
+  }
+  watch(() => auth.user?.id, reset)
+  return { form, measurements, savedMeasurements, measurementsLoaded, editing, busy, error, notice, dirty, hydrate, accept, hydrateMeasurements, acceptMeasurement, reset }
 })

@@ -3,7 +3,7 @@
     <view class="live-heading"><view><text class="live-eyebrow">清诉 · 档案</text><text class="live-title">健康档案</text></view><button role="button" tabindex="0" @keydown="activateButton" class="live-secondary" :disabled="loading" @click="load">刷新记录</button></view>
     <view v-if="!auth.isLoggedIn" class="live-card live-blank"><QIcon name="file" /><text>登录后查看自己的健康记录</text><button role="button" tabindex="0" @keydown="activateButton" class="live-primary" @click="workspace.accountOpen = true">登录账户</button></view>
     <template v-else>
-      <view class="live-card"><view class="live-row"><text class="live-subtitle">{{ workspace.profile.name }}</text><button role="button" tabindex="0" @keydown="activateButton" class="live-link" @click="workspace.accountOpen = true">编辑账户档案</button></view><view v-if="overview" class="overview-grid"><view><text class="live-muted">身高 / 体重</text><text>{{ overview.vitals.latest_height_cm ?? '—' }} cm / {{ overview.vitals.latest_weight_kg ?? '—' }} kg</text><view class="measurement-actions"><button role="button" tabindex="0" @keydown="activateButton" class="live-link" @click="recordMeasurement(1)">记录身高</button><button role="button" tabindex="0" @keydown="activateButton" class="live-link" @click="recordMeasurement(2)">记录体重</button></view></view><view><text class="live-muted">最近血压</text><text>{{ overview.vitals.latest_bp ? `${overview.vitals.latest_bp.systolic}/${overview.vitals.latest_bp.diastolic} mmHg` : '暂无记录' }}</text></view><view><text class="live-muted">BMI</text><text>{{ overview.vitals.bmi ?? '—' }}</text></view><view><text class="live-muted">近 90 天问诊</text><text>{{ overview.trend_summary.episodes_90d }}</text></view></view></view>
+      <view class="live-card"><view class="live-row"><text class="live-subtitle">{{ workspace.profile.name }}</text></view><view v-if="overview" class="overview-grid"><view><text class="live-muted">身高 / 体重</text><text>{{ overview.vitals.latest_height_cm ?? '—' }} cm / {{ overview.vitals.latest_weight_kg ?? '—' }} kg</text></view><view><text class="live-muted">最近血压</text><text>{{ overview.vitals.latest_bp ? `${overview.vitals.latest_bp.systolic}/${overview.vitals.latest_bp.diastolic} mmHg` : '暂无记录' }}</text></view><view><text class="live-muted">BMI</text><text>{{ overview.vitals.bmi ?? '—' }}</text></view><view><text class="live-muted">近 90 天问诊</text><text>{{ overview.trend_summary.episodes_90d }}</text></view></view></view>
       <view class="live-tabs" role="tablist" aria-label="档案类型"><button v-for="tab in tabs" :key="tab.id" role="tab" tabindex="0" @keydown="activateButton" :aria-selected="active === tab.id" :class="{ active: active === tab.id }" @click="active = tab.id">{{ tab.title }}</button></view>
       <text v-if="error" class="live-error" role="alert">{{ error }}</text><text v-if="loading" class="live-muted" role="status">正在读取健康记录…</text>
       <view v-if="active === 'episodes'" class="live-card">
@@ -43,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import QIcon from '@/components/QIcon.vue'
 import { activateButton } from '@/components/buttonKeyboard'
 import { useLiveWorkspaceStore } from '@/stores/liveWorkspace'
@@ -94,8 +94,8 @@ async function perform(action: () => Promise<void>) { if (busy.value) return; bu
 watch(() => auth.user?.id, () => { loadVersion += 1; overview.value = null; trend.value = null; episodes.value = []; episodeTotal.value = 0; vitals.value = []; vitalTotal.value = 0; medications.value = []; vitalOpen.value = false; medicationOpen.value = false; loading.value = false; void load() })
 onMounted(() => { if (workspace.activeTab === 'archive') void load() })
 watch(() => workspace.activeTab, (tab) => { if (tab === 'archive') void load() })
-function newVital(kind = 0) { vitalId.value = undefined; Object.assign(vital, { kind, date: clock()[0], time: clock()[1], systolic: '', diastolic: '', pulse: '', value: '' }); vitalOpen.value = true }
-async function recordMeasurement(kind: number) { active.value = 'vitals'; newVital(kind); await nextTick(); uni.pageScrollTo({ selector: '#vital-editor', duration: 200 }) }
+watch(() => workspace.accountOpen, (open, wasOpen) => { if (wasOpen && !open && workspace.activeTab === 'archive') void load() })
+function newVital() { vitalId.value = undefined; Object.assign(vital, { kind: 0, date: clock()[0], time: clock()[1], systolic: '', diastolic: '', pulse: '', value: '' }); vitalOpen.value = true }
 function editVital(item: VitalRecord) { vitalId.value = item.id; Object.assign(vital, { kind: kinds.indexOf(item.kind), date: item.measured_at.slice(0, 10), time: item.measured_at.slice(11, 16), systolic: String(item.systolic ?? ''), diastolic: String(item.diastolic ?? ''), pulse: String(item.pulse ?? ''), value: String(item.kind === 'height' ? item.height_cm ?? '' : item.weight_kg ?? '') }); vitalOpen.value = true }
 function numeric(value: string) { if (!value.trim() || !Number.isFinite(Number(value))) throw new Error('请输入有效数值。'); return Number(value) }
 function submitVital() { void perform(async () => { await saveVital({ kind: kinds[vital.kind], measured_at: `${vital.date} ${vital.time}:00`, ...(vital.kind === 0 ? { systolic: numeric(vital.systolic), diastolic: numeric(vital.diastolic), pulse: vital.pulse ? numeric(vital.pulse) : null } : vital.kind === 1 ? { height_cm: numeric(vital.value) } : { weight_kg: numeric(vital.value) }) }, vitalId.value); vitalOpen.value = false }) }
@@ -132,7 +132,6 @@ function vitalText(item: VitalRecord) { return item.kind === 'bp' ? `血压 ${it
 .overview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; margin-top: 22px; }
 .overview-grid > view { min-width: 0; }
 .overview-grid text { display: block; }
-.measurement-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .import-note { margin-top: 24px; padding-top: 16px; border-top: 1px solid #ededE8; }
 .record-filters { display: flex; flex-wrap: wrap; gap: 14px; margin: 18px 0 24px; }
 .record-filters > view { flex: 1 1 180px; max-width: 280px; }

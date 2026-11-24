@@ -299,13 +299,23 @@ anonymous.stop()
 
 const formAuth = vue.reactive({ user: { id: 43 }, isLoggedIn: true, updateProfileComplete() {} })
 const formWorkspace = vue.reactive({ patientProfile: clone(profile), initialized: true, error: '' })
-const profileWrites = [], policyRoutes = []
+const profileWrites = [], policyRoutes = [], bodyWrites = []
+const bodyVitals = { latest_height_cm: 170, latest_weight_kg: 65 }
+let rejectWeight = true
 let rejectProfile = true
 const formModules = loader({
   vue: { ...vue, onMounted() {} },
   '@/stores/auth': { useAuthStore: () => formAuth },
   '@/stores/liveWorkspace': { useLiveWorkspaceStore: () => formWorkspace },
   '@/api/profile': { updateProfile: async (payload) => { profileWrites.push(payload); if (rejectProfile) throw new Error('SYNTHETIC SAVE FAILED'); return { ...clone(profile), ...payload } } },
+  '@/api/archive': { getArchiveOverview: async () => ({ vitals: { ...bodyVitals } }) },
+  '@/api/health': { saveVital: async (payload) => {
+    bodyWrites.push(payload)
+    if (payload.kind === 'weight' && rejectWeight) throw new Error('SYNTHETIC WEIGHT SAVE FAILED')
+    if (payload.kind === 'height') bodyVitals.latest_height_cm = payload.height_cm
+    else bodyVitals.latest_weight_kg = payload.weight_kg
+    return { height_cm: payload.height_cm ?? null, weight_kg: payload.weight_kg ?? null }
+  } },
 }, { uni: { navigateTo: ({ url }) => policyRoutes.push(url) } })
 pinia.setActivePinia(pinia.createPinia())
 const firstFormScope = vue.effectScope()
@@ -328,6 +338,40 @@ await settle()
 assert.equal(secondForm.error.value, '')
 secondForm.openPolicy(false)
 assert.equal(policyRoutes[0], '/pages/privacy/index?section=privacy')
+await secondForm.loadMeasurements()
+assert.equal(secondForm.measurements.value.height_cm, '170')
+secondForm.measurements.value.height_cm = '172'
+secondForm.measurements.value.weight_kg = '67'
+secondForm.editing.value = true
+secondForm.saveProfile()
+await settle()
+assert.match(secondForm.error.value, /尚未全部保存/)
+assert.equal(secondForm.editor.savedMeasurements.height_cm, '172')
+assert.equal(secondForm.editor.savedMeasurements.weight_kg, '65')
+assert.equal(secondForm.measurements.value.weight_kg, '67', 'A failed weight save must preserve the draft')
+secondFormScope.stop()
+const reopenedFormScope = vue.effectScope()
+const reopenedForm = reopenedFormScope.run(() => formModules('@/components/QAccountPanel.vue').default.setup({}, { expose() {} }))
+await reopenedForm.loadMeasurements()
+assert.equal(reopenedForm.measurements.value.weight_kg, '67', 'Reopening and reloading must not replace an unsaved measurement')
+rejectWeight = false
+reopenedForm.saveProfile()
+await settle()
+assert.equal(reopenedForm.error.value, '')
+assert.deepEqual(bodyWrites.map((item) => item.kind), ['height', 'weight', 'weight'], 'Retry only measurements that have not already been saved')
+reopenedForm.measurements.value.height_cm = '172.0'
+reopenedForm.measurements.value.weight_kg = ''
+reopenedForm.saveProfile()
+await settle()
+assert.equal(bodyWrites.length, 3, 'Equivalent numbers and empty optional fields must not create duplicate measurements')
+assert.equal(reopenedForm.measurements.value.height_cm, '172')
+assert.equal(reopenedForm.measurements.value.weight_kg, '67')
+const previousProfileWrites = profileWrites.length
+reopenedForm.measurements.value.height_cm = '40'
+reopenedForm.saveProfile()
+await settle()
+assert.match(reopenedForm.error.value, /50–250/)
+assert.equal(profileWrites.length, previousProfileWrites, 'Validate both measurements before writing any part of the form')
 const cityChanges = []
 const city = formModules('@/components/QCityPicker.vue').default.setup({ code: '', name: '' }, { expose() {}, emit: (...args) => cityChanges.push(args) })
 city.choose({ detail: { value: [0, 0] } })
@@ -336,7 +380,9 @@ assert.equal(cityChanges[0][1].name, '北京市')
 formAuth.user = null; formAuth.isLoggedIn = false
 await settle()
 assert.equal(secondForm.form.value.name, '', 'Logout must clear the in-memory health draft')
-secondFormScope.stop()
+assert.equal(reopenedForm.measurements.value.height_cm, '')
+assert.equal(reopenedForm.measurements.value.weight_kg, '')
+reopenedFormScope.stop()
 
 const requestedDays = []
 const weekModules = loader({

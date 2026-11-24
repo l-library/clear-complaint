@@ -15,7 +15,6 @@
           <button role="button" tabindex="0" @keydown="activateButton" @click="navigate('chat'); menuOpen = false">AI 对话</button>
           <button role="button" tabindex="0" @keydown="activateButton" @click="navigate('archive'); menuOpen = false">健康档案</button>
           <button role="button" tabindex="0" @keydown="activateButton" @click="navigate('plans'); menuOpen = false">健康计划</button>
-          <button role="button" tabindex="0" @keydown="activateButton" @click="showProfile(); menuOpen = false">账户信息</button>
         </view>
       </view>
       <view class="landing-main">
@@ -69,7 +68,7 @@
         <view v-if="activeTab === 'chat'" class="chat-mobile-toolbar"><button role="button" tabindex="0" @keydown="activateButton" class="mobile-home" aria-label="返回首页" @click="goHome"><image src="/static/brand.svg" /><text>清诉</text></button><view><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="新建问诊" @click="requestNewConversation"><QIcon name="plus" /></button><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="最近对话" :aria-expanded="historyOpen" @click="historyOpen = !historyOpen"><QIcon name="clock" /></button></view></view>
         <view v-if="activeTab !== 'chat'" class="workspace-header">
           <view class="breadcrumb"><text class="breadcrumb-brand">清诉</text><text class="slash">/</text><text>{{ pageTitle }}</text></view>
-          <view class="workspace-actions"><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="账户信息" @click="showProfile"><QIcon name="user" /></button><button role="button" tabindex="0" @keydown="activateButton" class="icon-button mobile-history-button" aria-label="最近对话" :aria-expanded="historyOpen" @click="historyOpen = !historyOpen"><QIcon name="clock" /></button><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="返回首页" @click="goHome"><QIcon name="home" /></button></view>
+          <view class="workspace-actions"><button role="button" tabindex="0" @keydown="activateButton" class="icon-button mobile-history-button" aria-label="最近对话" :aria-expanded="historyOpen" @click="historyOpen = !historyOpen"><QIcon name="clock" /></button><button role="button" tabindex="0" @keydown="activateButton" class="icon-button" aria-label="返回首页" @click="goHome"><QIcon name="home" /></button></view>
         </view>
         <view v-if="historyOpen" class="history-menu"><text class="recent-heading">最近对话</text><button role="button" tabindex="0" @keydown="activateButton" v-for="item in recentConversations" :key="item.id" class="recent-conversation" @click="openConversation(item.id); historyOpen = false"><QIcon name="chat" /><view><text class="recent-title">{{ item.title }}</text><text class="recent-kind">问诊</text></view></button><button role="button" tabindex="0" @keydown="activateButton" class="history-new" @click="requestNewConversation(); historyOpen = false">＋ 新建问诊</button></view>
         <view class="workspace-content">
@@ -110,17 +109,14 @@
               </view>
             </view>
             <view v-if="!store.accountOpen" class="context-column">
-              <view class="context-tabs" role="tablist" aria-label="问诊侧栏">
-                <button role="tab" tabindex="0" @keydown="activateButton" :aria-selected="contextTab === 'review'" :class="{ selected: contextTab === 'review' }" @click="contextTab = 'review'">纠偏与评估</button>
-                <button role="tab" tabindex="0" @keydown="activateButton" :aria-selected="contextTab === 'account'" :class="{ selected: contextTab === 'account' }" @click="contextTab = 'account'">账户信息</button>
-              </view>
-              <QEpisodeReview v-if="contextTab === 'review'" :detail="store.detail" :pending="pending" />
-              <QAccountPanel v-else />
+              <view class="context-heading"><text>纠偏与评估</text></view>
+              <QEpisodeReview :detail="store.detail" :pending="pending" />
             </view>
           </view>
         </view>
       </view>
       <view class="mobile-nav" aria-label="主要导航">
+        <button role="button" tabindex="0" @keydown="activateButton" aria-label="账户信息" @click="showProfile"><QIcon name="user" /><text>账户</text></button>
         <button role="button" tabindex="0" @keydown="activateButton" v-for="tab in navigationTabs" :key="tab.id" :class="{ 'mobile-tab-active': activeTab === tab.id }" :aria-pressed="activeTab === tab.id" @click="navigate(tab.id)"><QIcon :name="tab.icon" /><text>{{ tab.title }}</text></button>
       </view>
     </template>
@@ -152,7 +148,6 @@ const sidebarExpanded = ref(false)
 const entryComposer = ref<InstanceType<typeof QComposer> | null>(null)
 const replyComposer = ref<InstanceType<typeof QComposer> | null>(null)
 const historyOpen = ref(false)
-const contextTab = ref<'review' | 'account'>('review')
 const messageScrollTop = ref(0)
 const messageCount = computed(() => messages.value.length)
 const isFollowUp = computed(() => Boolean(store.followUpReminder))
@@ -455,9 +450,8 @@ watch([messageCount, pending, activeTab, () => activeConversation.value?.id], as
   animation: reveal .4s .1s ease both;
 }
 .account-overlay { position: fixed; z-index: 100; inset: 0; display: flex; justify-content: flex-end; padding: 24px; box-sizing: border-box; background: rgba(27, 33, 28, .13); }
-.context-tabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 8px; padding: 17px 18px 9px; background: rgba(250,253,248,.85); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
-.context-tabs button { margin: 0; padding: 9px 13px; min-height: 44px; border-radius: 24px; background: transparent; color: #586458; font-size: 13px; line-height: 1.5; }
-.context-tabs .selected { background: rgba(255,255,255,.8); color: #293c31; box-shadow: inset 0 1px 0 #fff; }
+.context-heading { position: sticky; top: 0; z-index: 2; display: flex; padding: 17px 18px 9px; background: rgba(250,253,248,.85); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.context-heading text { display: block; padding: 9px 13px; min-height: 44px; box-sizing: border-box; border-radius: 24px; background: rgba(255,255,255,.8); color: #293c31; box-shadow: inset 0 1px 0 #fff; font-size: 13px; line-height: 1.5; }
 .account-dialog { width: min(430px, 100%); height: 100%; align-self: stretch; }
 .account-close { position: sticky; z-index: 5; top: 8px; margin: 8px 8px 0 auto; width: 40px; height: 40px; }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
