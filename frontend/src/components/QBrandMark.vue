@@ -1,5 +1,5 @@
 <template>
-  <view class="brand-glyph" :class="{ 'brand-speaking': animated }" role="img" aria-label="ClearComplaint，C 与发音">
+  <view class="brand-glyph" :class="{ 'brand-speaking': animated }" role="img" aria-label="清诉，C 与发音">
     <image class="brand-layer" src="/static/brand/c.svg" mode="aspectFit" aria-hidden="true" />
     <image class="brand-layer sound-wave sound-wave-near" src="/static/brand/wave-near.svg" mode="aspectFit" aria-hidden="true" />
     <image class="brand-layer sound-wave sound-wave-far" src="/static/brand/wave-far.svg" mode="aspectFit" aria-hidden="true" />

@@ -162,6 +162,7 @@ function setup(route = 'pages/index/index') {
 for (const route of ['pages/index/index', 'pages/chat/index']) {
   const app = setup(route)
   await app.store.initialize()
+  assert.equal(app.store.screen, route === 'pages/index/index' ? 'landing' : 'workspace')
   app.store.draft = 'SYNTHETIC UI TEST'
   await app.component.handleSend()
   assert.equal(app.store.messages[0].content, 'SYNTHETIC UI TEST')
@@ -180,6 +181,11 @@ for (const route of ['pages/index/index', 'pages/chat/index']) {
   await app.store.saveConversation(true, '2026-11-26')
   assert.deepEqual(app.saves[1], [71, true, '2026-11-26'], 'An archived episode must still allow a reminder request')
   assert.match(app.store.saveNotice, /2026-11-25 09:00:00/)
+  app.component.goHome()
+  await settle()
+  assert.equal(app.store.screen, 'landing', 'Returning home must restore the separate landing page')
+  assert.equal(app.routes.at(-1), '/pages/index/index')
+  assert.equal(app.store.messages[0].content, 'SYNTHETIC UI TEST', 'Returning home must preserve the active consultation')
   app.stop()
 }
 
@@ -282,7 +288,10 @@ anonymous.auth.isLoggedIn = false
 anonymous.auth.user = null
 await settle()
 anonymous.store.draft = 'SYNTHETIC UNSENT'
-assert.equal(anonymous.store.sendMessage(), false)
+await anonymous.component.handleSend()
+assert.equal(anonymous.store.screen, 'landing', 'A sign-in prompt must keep the user on the landing page')
+assert.equal(anonymous.routes.length, 0)
+assert.equal(anonymous.flights.length, 0)
 assert.equal(anonymous.creations.length, 0)
 assert.equal(anonymous.store.draft, 'SYNTHETIC UNSENT')
 assert.equal(anonymous.store.accountOpen, true)
