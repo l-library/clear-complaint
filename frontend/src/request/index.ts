@@ -62,7 +62,7 @@ export function request<T>(path: string, options: AppRequestOptions = {}): Promi
           reject(new ApiError(code, body?.message || `请求失败（HTTP ${response.statusCode}）`))
         })().catch(reject)
       },
-      fail: () => reject(new ApiError(-1, '无法连接本机后端，请确认服务已启动后重试。')),
+      fail: () => reject(new ApiError(-1, '暂时无法连接，请稍后重试。')),
     })
   })
 }

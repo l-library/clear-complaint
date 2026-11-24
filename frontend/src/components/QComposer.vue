@@ -19,10 +19,10 @@
       <view class="composer-bottom">
         <view class="composer-controls">
           <button role="button" tabindex="0" @keydown="activateButton" v-if="compact" class="utility-button" aria-label="添加健康资料" @click="$emit('attach')"><QIcon name="plus" /></button>
-          <button role="button" tabindex="0" @keydown="activateButton" class="privacy-button" :class="{ 'utility-button': compact, 'anonymous': !compact }" aria-label="账户与隐私说明" @click="showPrivacy"><QIcon name="anonymous" /><text v-if="!compact">Private</text></button>
+          <button role="button" tabindex="0" @keydown="activateButton" class="privacy-button" :class="{ 'utility-button': compact, 'anonymous': !compact }" aria-label="账户与隐私说明" @click="showPrivacy"><QIcon name="anonymous" /><text v-if="!compact">隐私保护</text></button>
         </view>
         <button role="button" tabindex="0" @keydown="activateButton" class="send-button" :class="{ 'send-round': compact }" :disabled="pending" :aria-label="pending ? '正在整理' : '发送消息'" @click="$emit('send')">
-          <text v-if="!compact">{{ pending ? 'Preparing…' : 'Start chat' }}</text>
+          <text v-if="!compact">{{ pending ? '正在整理…' : '开始交流' }}</text>
           <QIcon :name="pending ? 'clock' : compact ? 'send' : 'arrow-right'" />
         </button>
       </view>
@@ -73,7 +73,7 @@ async function focus() {
 }
 
 function showPrivacy() {
-  uni.showModal({ title: '账户与隐私', content: '登录后，提交的信息由清诉后端处理并保存在你的账户中。可在账户信息中导出、清空数据或注销账户。', showCancel: false })
+  uni.showModal({ title: '账户与隐私', content: '登录后，提交的信息由清诉处理并保存在你的账户中。可在账户信息中导出、清空数据或注销账户。', showCancel: false })
 }
 
 defineExpose({ focus })
@@ -85,7 +85,7 @@ defineExpose({ focus })
 .composer { display: flex; flex-direction: column; height: var(--composer-height, 190px); min-height: 94px; box-sizing: border-box; padding: max(12px, calc(24 * var(--u, 1px))); border: 1px solid #e9e9e4; border-radius: max(16px, calc(24 * var(--u, 1px))); background: #fff; box-shadow: 0 8px 36px #1b1b1806; transition: border-color .18s, box-shadow .18s; }
 .composer:focus-within { border-color: #4b85ff; box-shadow: 0 0 0 2px #2463eb20, 0 8px 36px #1b1b1806; }
 .composer-invalid { border-color: #b54a3e; }
-.message-input { flex: 1; width: 100%; height: 0; min-height: 25px; color: #1b1b18; font-family: Arial, 'Noto Sans SC', sans-serif; font-size: clamp(14px, calc(22 * var(--u, 1px)), 26px); line-height: 1.6; }
+.message-input { flex: 1; width: 100%; height: 0; min-height: 25px; color: #1b1b18; font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif); font-size: clamp(14px, calc(22 * var(--u, 1px)), 26px); line-height: 1.6; }
 .message-input :deep(textarea) { padding: 0; outline: 0; }
 .message-input :deep(textarea:focus-visible) { outline: 0; }
 .message-input :deep(.uni-textarea-placeholder) { color: #767674; }

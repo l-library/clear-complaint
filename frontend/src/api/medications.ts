@@ -20,8 +20,9 @@ export interface MedicationPayload {
   ended_on?: string | null
 }
 
-export function getMedications(): Promise<{ records: Medication[] }> {
-  return request('/medications', { auth: true })
+export function getMedications(kind?: Medication['kind'], status?: 'active' | 'stopped'): Promise<{ records: Medication[] }> {
+  const filters = [kind ? `kind=${encodeURIComponent(kind)}` : '', status ? `status=${status}` : ''].filter(Boolean)
+  return request(`/medications${filters.length ? `?${filters.join('&')}` : ''}`, { auth: true })
 }
 
 export function createMedication(payload: MedicationPayload): Promise<Medication> {

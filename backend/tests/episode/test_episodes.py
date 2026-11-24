@@ -375,6 +375,54 @@ def test_unknown_condition_name_is_dropped(
 # ---- 追问 ----
 
 
+def test_missing_medication_gets_a_second_round(
+    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fields = ["onset", "duration", "location", "character", "associated_symptoms"]
+    first = _needs_clarification(fields)
+    first["clarification_request"]["missing_fields"] = fields + ["medication"]
+    fake = Platform(
+        [
+            first,
+            {
+                "status": "insufficient_evidence",
+                "missing_fields": ["medication"],
+                "unknown_fields": [],
+            },
+            _draft_ready(),
+        ]
+    )
+    monkeypatch.setattr(platform, "call_triage", fake)
+    _post_episode(db_client, user, complaint="合成测试：鼻塞流涕", key=_KEY)
+    answers = [
+        {"field": "onset_at", "value": "两天前"},
+        {"field": "duration_text", "value": "1–3 天"},
+        {"field": "site", "value": "鼻部"},
+        {"field": "nature", "value": "鼻塞"},
+        {"field": "associated", "value": "流涕"},
+    ]
+    response = db_client.post(
+        "/api/episodes/1/clarify",
+        json={"answers": answers},
+        headers=_sse_headers(user, "11111111-2222-4333-8444-555555555555"),
+    )
+    assert response.status_code == 200
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["clarify"]["round"] == 2
+    assert [item["field"] for item in detail["clarify"]["questions"]] == ["medications_text"]
+    assert fake.calls[1]["normalized"]["duration"] == "一至三天"
+    assert detail["normalized"]["duration_text"] == "1–3 天"
+    response = db_client.post(
+        "/api/episodes/1/clarify",
+        json={"answers": [{"field": "medications_text", "value": "不清楚"}]},
+        headers=_sse_headers(user, "22222222-3333-4444-8555-666666666666"),
+    )
+    assert response.status_code == 200
+    assert fake.calls[2]["normalized"]["medication"] == "unknown"
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["episode"]["status"] == "ready"
+
+
 def test_needs_clarification_then_answer(
     db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:

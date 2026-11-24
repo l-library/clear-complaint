@@ -12,8 +12,8 @@ export interface VitalInput {
   weight_kg?: number
 }
 
-export function listVitals(page = 1): Promise<PageResult<VitalRecord>> {
-  return request(`/vitals?page=${page}&size=20`, { auth: true })
+export function listVitals(page = 1, kind?: VitalInput['kind']): Promise<PageResult<VitalRecord>> {
+  return request(`/vitals?page=${page}&size=20${kind ? `&kind=${encodeURIComponent(kind)}` : ''}`, { auth: true })
 }
 export function saveVital(input: VitalInput, id?: number): Promise<VitalRecord> {
   // Pickers and API responses use Shanghai wall time; writes require an explicit offset.

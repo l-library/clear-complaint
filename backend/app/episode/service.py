@@ -31,7 +31,7 @@ from app.common.clock import format_shanghai, now_shanghai
 from app.common.codes import ErrorCode
 from app.common.errors import BizException
 from app.db.session import get_session
-from app.episode import compose, platform
+from app.episode import clarification, compose, platform
 from app.episode.models import (
     STATUS_CLARIFYING,
     STATUS_FAILED,
@@ -253,7 +253,7 @@ async def submit_clarify(
     for answer in answers:
         field = str(answer.get("field", ""))
         value = str(answer.get("value", ""))
-        is_unknown = bool(answer.get("is_unknown", False))
+        is_unknown = bool(answer.get("is_unknown", False)) or clarification.is_unknown(value)
         if field not in question_fields or field in seen:
             raise BizException(ErrorCode.CLARIFY_FIELD_INVALID)
         if not is_unknown and (not value.strip() or len(value) > 200):
@@ -434,6 +434,7 @@ async def _replay(
                 "round": state.get("round", 0),
                 "round_limit": state.get("round_limit", compose.CLARIFY_ROUND_LIMIT),
                 "missing_fields": state.get("missing_fields", []),
+                "unknown_fields": state.get("unknown_fields", []),
                 "questions": state.get("questions", []),
             },
         )
@@ -497,7 +498,12 @@ async def _pipeline(
             task.cancel()
 
     status = str(result.get("status", ""))
-    if status == "needs_clarification":
+    state = episode.clarify_state or {}
+    pending = clarification.pending_fields(result, episode.normalized or {})
+    can_clarify = (
+        not state.get("skipped") and _int_or(state.get("round"), 0) < compose.CLARIFY_ROUND_LIMIT
+    )
+    if pending and can_clarify and status in ("needs_clarification", "insufficient_evidence"):
         async for event in _apply_clarification(session, episode, result):
             yield event
         return
@@ -516,13 +522,13 @@ async def _pipeline(
 async def _apply_clarification(
     session: AsyncSession, episode: Episode, result: dict[str, object]
 ) -> AsyncIterator[tuple[str, dict[str, object]]]:
-    request = result.get("clarification_request")
-    if not isinstance(request, dict) or not request.get("question_fields"):
+    fields = clarification.pending_fields(result, episode.normalized or {})
+    if not fields:
         yield _stage(episode, "compose", 95, compose.STAGE_TEXTS["degraded"])
         async for event in _finalize_fallback(session, episode):
             yield event
         return
-    round_ = int(request.get("round", 1))
+    round_ = _int_or((episode.clarify_state or {}).get("round"), 0) + 1
     if round_ > compose.CLARIFY_ROUND_LIMIT:
         # 平台超过轮次上限仍在追问：按结构不合规兜底
         yield _stage(episode, "compose", 95, compose.STAGE_TEXTS["degraded"])
@@ -530,16 +536,13 @@ async def _apply_clarification(
             yield event
         return
 
-    def to_public(raw: object) -> list[str]:
-        return [
-            compose.FIELD_FROM_PLATFORM[str(field)]
-            for field in (raw if isinstance(raw, list) else [])
-            if isinstance(field, str)
-            and compose.FIELD_FROM_PLATFORM.get(field) in compose.QUESTION_TEMPLATES
-        ]
-
-    fields = to_public(request.get("question_fields"))
-    missing = to_public(request.get("missing_fields"))
+    missing = [clarification.FIELDS[field] for field in fields]
+    fields = missing[:5]
+    unknown = [
+        field
+        for field, value in (episode.normalized or {}).items()
+        if isinstance(value, str) and clarification.is_unknown(value)
+    ]
     state = dict(episode.clarify_state or {})
     state.update(
         {
@@ -547,6 +550,7 @@ async def _apply_clarification(
             "round_limit": compose.CLARIFY_ROUND_LIMIT,
             "question_fields": fields,
             "missing_fields": missing,
+            "unknown_fields": unknown,
             "questions": compose.compose_questions(fields),
         }
     )
@@ -565,6 +569,7 @@ async def _apply_clarification(
             "round": round_,
             "round_limit": compose.CLARIFY_ROUND_LIMIT,
             "missing_fields": missing,
+            "unknown_fields": unknown,
             "questions": state["questions"],
         },
     )
@@ -870,6 +875,7 @@ async def episode_detail(session: AsyncSession, user_id: int, episode_id: int) -
             "round": state.get("round", 0),
             "round_limit": state.get("round_limit", compose.CLARIFY_ROUND_LIMIT),
             "missing_fields": state.get("missing_fields", []),
+            "unknown_fields": state.get("unknown_fields", []),
             "questions": state.get("questions", []),
         }
     return {
