@@ -1,0 +1,44 @@
+{
+  "schema_version": "clear-complaint.daily-companion.request.v1",
+  "request_id": "SYNTHETIC-DAILY-NO-ARCHIVE-001",
+  "report_date": "2026-11-23",
+  "timezone": "Asia/Shanghai",
+  "data_source": "mock",
+  "watch_data": {
+    "date": "2026-11-23",
+    "wear_minutes": 1380,
+    "device": {
+      "id": "MOCK-WATCH-001",
+      "brand": "Synthetic",
+      "model": "Demo"
+    },
+    "metrics": {
+      "steps": {
+        "value": 4600,
+        "unit": "count",
+        "quality": "usable"
+      },
+      "exercise_duration": {
+        "value": 22,
+        "unit": "min",
+        "quality": "usable"
+      },
+      "sleep_duration": {
+        "value": 435,
+        "unit": "min",
+        "quality": "usable"
+      },
+      "rhr": {
+        "value": 64,
+        "unit": "bpm",
+        "quality": "usable"
+      },
+      "activity_type": {
+        "value": "walking",
+        "quality": "usable"
+      }
+    }
+  },
+  "health_archive": {},
+  "safety_context": {}
+}

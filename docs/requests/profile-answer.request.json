@@ -1,0 +1,17 @@
+{
+  "schema_version": "clear-complaint.profile-intake.request.v1",
+  "session_id": "SYNTHETIC-PROFILE-001",
+  "request_id": "SYNTHETIC-P02-20261124",
+  "action": "answer",
+  "as_of_date": "2026-11-24",
+  "form_snapshot": {},
+  "medication_drafts": null,
+  "active_field": "birth_date",
+  "user_input": "我是1998年5月20日出生的。",
+  "skipped_fields": [],
+  "unknown_fields": [],
+  "required_fields": [
+    "birth_date",
+    "sex"
+  ]
+}

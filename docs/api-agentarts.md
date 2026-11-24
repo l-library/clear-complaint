@@ -1,28 +1,39 @@
 # 清诉工作流 API 对接
 
-更新日期：2026-11-21。
+更新日期：2026-11-24。
 
-本文件定义后端调用三个AgentArts工作流的接口、请求示例和响应处理。与[清诉业务API文档](api.md)配套：本文引用的第1–15节均指该文档中的公开业务API，本文件保留第16节编号以便对照。
+本文件定义后端调用四个AgentArts工作流的接口、请求示例和响应处理。2026-11-24新增每日健康关怀，详见16.8；保留原三条工作流契约。与[清诉业务API文档](api.md)配套：本文引用的第1–15节均指该文档中的公开业务API，本文件保留第16节编号以便对照。
 
-实际凭据与鉴权实现已单独放入《auth-info-backend-only.md》，由负责人私下交付。本文件和公开示例包不包含明文密钥。拆分是为了分别维护与交接；实际发送请求仍要由后端注入认证信息。
+实际凭据与鉴权实现已单独放入《鉴权信息-仅后端.md》，由负责人私下交付。本文件和公开示例包不包含明文密钥。拆分是为了分别维护与交接；实际发送请求仍要由后端注入认证信息。
+
+
+## 本次交接变更（2026-11-24）
+
+- **只替换 Triage 修订导出**，目标 `workflow_version=2026-11-24.mainflow-io.4`；Profile 与 Followup 保持原版。保留本次附件新增的 Daily 协议，Daily 不属于这次 Triage 修复，也尚未接入本地业务层。
+- Triage 保留原运行时 URL。截图显示控制台“已提交／保存于 2026-11-24 10:47:51”，但未显示最终 `workflow_version`，不能仅凭截图认定发布接口已运行修订版；按下方版本表核对实际终态。
+- 补齐数字／区间时长、第二轮补问用药以及 `missing_fields / unknown_fields / insufficient_evidence` 的判定约定，详见 16.3.4.1。
+- 截图中的 `query: 你好` 是平台通用示例。本项目统一传 `inputs.request_json` 字符串；调试框粘贴内层业务 JSON，不额外加引号。会话 ID 由后端生成，不能复用截图常量。
+- 原三条工作流的 28 组合成测试已通过本地原生代码入口／分支检查；未据此宣称发布 URL、知识检索和模型输出已验收。Daily 的控制台结果沿用附件记录，本次没有另行运行或调用。
+- 鉴权文档已根据本次截图补充 Triage。真实凭据只放在仓库外的私密文件中，公开包不包含鉴权文件。本次仅修订文档与交接样例，不改应用、数据库、云端配置或现有接口。
 
 ## 16. 后端调用 AgentArts 工作流
 
-更新日期：2026-11-21。本节在配套业务API第1–15节的前后端 HTTP 契约之外，补充**后端 → AgentArts**的内部契约。前端仍只调用清诉自己的 `/api`，不接触平台密钥、模型原文、内部证据池或平台执行事件。
+更新日期：2026-11-24。本节在配套业务API第1–15节的前后端 HTTP 契约之外，补充**后端 → AgentArts**的内部契约。前端仍只调用清诉自己的 `/api`，不接触平台密钥、模型原文、内部证据池或平台执行事件。
 
-本节依据用户提供的三个调用路径、本地交付的三份 DSL 和其代码节点编写。调用路径已登记；**未使用密钥发起真实网络调用，尚未验证这些运行时部署的具体工作流版本**。本地 DSL 预期版本如下，后端联调时必须校验最终结果中的版本：
+本节保留原三条工作流契约，Daily调用路径、协议与控制台ready状态按本次附件记载。当前附件未包含Daily DSL或完整25项填值文件，不能声称已核对其代码。**本次未使用密钥请求发布URL，HTTP/SSE联调仍需核对。** 各工作流预期版本如下：
 
 | 工作流 | 请求 schema_version | 响应 schema_version | 本地交付 workflow_version |
 | --- | --- | --- | --- |
-| Triage-Workflow-MainFlow | `clear-complaint.triage.request.v1` | `clear-complaint.triage.workflow.v1` | `2026-11-21.mainflow-io.3` |
+| Triage-Workflow-MainFlow | `clear-complaint.triage.request.v1` | `clear-complaint.triage.workflow.v1` | `2026-11-24.mainflow-io.4` |
 | Profile-Intake-Workflow | `clear-complaint.profile-intake.request.v1` | `clear-complaint.profile-intake.workflow.v1` | `2026-11-21.profile-intake.1` |
 | Followup-Supplement-Workflow | `clear-complaint.followup-supplement.request.v1` | `clear-complaint.followup-supplement.workflow.v1` | `2026-11-21.followup-supplement.1` |
+| Daily-Health-Companion-Workflow | `clear-complaint.daily-companion.request.v1` | `clear-complaint.daily-companion.workflow.v1` | `2026-11-24.daily-companion.1` |
 
-本节定义对接方式，不代表已实现后端调用客户端、归一化、数据库、正式受控目录或新增公开路由。示例全部为软件合成数据，不能作为真实医学证据或临床规则。
+本地后端已有原三条工作流的客户端和相关业务接入；本文新增Daily尚需扩展配置/客户端映射和日报业务层。本次只修改交接文件，不新增后端路由或持久化实现。示例全部为合成数据。
 
 ### 16.1 调用地址、配置与职责
 
-三个地址均使用 `POST`。严格使用当前调用路径，不复用旧 Health-Target、Stateful-Update 或适配服务地址，也不自行添加旧示例中的 `?endpoint=Latest`。
+四个地址均使用 `POST`。严格使用当前调用路径，不复用旧 Health-Target、Stateful-Update 或适配服务地址，也不自行添加旧示例中的 `?endpoint=Latest`。
 
 **Profile-Intake-Workflow**
 
@@ -42,25 +53,30 @@ https://defaultgw-mqytamjqmn.cn-southwest-2.huaweicloud-agentarts.com/runtimes/a
 https://defaultgw-mqytamjqmn.cn-southwest-2.huaweicloud-agentarts.com/runtimes/agent-arts-560ea305ef5542a79edd582e6da0fc7c/invocations
 ```
 
-后端公开配置记录调用地址、运行模式和密钥变量名；凭据值、获取方法及请求头构造统一放到另行私密交付的《auth-info-backend-only.md》，不进入本文件和公开示例包。正式请求仍必须完成运行时认证，不能因示例没有明文凭据而省略认证。
+**Daily-Health-Companion-Workflow**
+
+```text
+https://defaultgw-mqytamjqmn.cn-southwest-2.huaweicloud-agentarts.com/runtimes/agent-arts-fe15b614a68241f0b850005b9b325630/invocations
+```
+
+后端公开配置只记录调用地址与运行模式；凭据值、获取方法、私有配置及请求头构造统一放到另行私密交付的《鉴权信息-仅后端.md》，不进入本文件和公开示例包。正式请求仍必须完成运行时认证，不能因示例没有明文凭据而省略认证。
 
 ```dotenv
 AGENTARTS_PROFILE_INTAKE_URL=https://defaultgw-mqytamjqmn.cn-southwest-2.huaweicloud-agentarts.com/runtimes/agent-arts-b86c2f610cf64a89b8e215050e9e4508/invocations
-AGENTARTS_PROFILE_INTAKE_API_KEY=
 AGENTARTS_FOLLOWUP_SUPPLEMENT_URL=https://defaultgw-mqytamjqmn.cn-southwest-2.huaweicloud-agentarts.com/runtimes/agent-arts-6a31c4e6059f4696ab5d0f458220c7bf/invocations
-AGENTARTS_FOLLOWUP_SUPPLEMENT_API_KEY=
 AGENTARTS_TRIAGE_URL=https://defaultgw-mqytamjqmn.cn-southwest-2.huaweicloud-agentarts.com/runtimes/agent-arts-560ea305ef5542a79edd582e6da0fc7c/invocations
-AGENTARTS_TRIAGE_API_KEY=
+AGENTARTS_DAILY_COMPANION_URL=https://defaultgw-mqytamjqmn.cn-southwest-2.huaweicloud-agentarts.com/runtimes/agent-arts-fe15b614a68241f0b850005b9b325630/invocations
 AGENTARTS_INVOKE_MODE=published
 ```
 
-KEY 必须通过私密渠道交付，文档与仓库只登记变量名，不填写真实值；变量名已同步登记在 `backend/.env.example`。三个运行时分别持有各自的 Key，不能假定共用，也不能与 MaaS 模型密钥混用。这些配置名尚未接入后端 `Settings`，URL 登记也不证明云端版本与接口联调已经验收。
+原三条工作流配置已在本地后端Settings中声明；新增AGENTARTS_DAILY_COMPANION_URL及其私有Key、daily客户端映射仍待接入。URL登记不等于发布版本与HTTP联调验收。
 
 | 清诉业务入口 | 调用平台的时机 | 后端保留的责任 |
 | --- | --- | --- |
 | 第5节创建、澄清、跳过或重试问诊 | 合法进入 `generating`，未命中红旗，需要生成草稿 | 身份/归属、归一化、固定追问、规则、幂等、最终闸门/模板、存储和兜底 |
-| 档案引导对话服务，公开入口见16.4的待实现建议 | 选择下一采集字段，或抽取本轮单字段回答 | 临时状态、原话、归属、确认表单、最终保存；不自动写正式档案 |
+| 档案引导对话服务（公开入口尚未实现，见16.4.4） | 选择下一采集字段，或抽取本轮单字段回答 | 临时状态、原话、归属、确认表单、最终保存；不自动写正式档案 |
 | 第10.2节 `POST /api/reminders/{id}/respond` | 第一层规则完成，满足16.5的第二层适用条件 | 第一层建议、受控目录、8秒预算、准备项映射、随访记录和降级 |
+| 每日健康关怀，具体业务入口待后端实现 | 后端汇总当天设备数据和授权健康档案后生成 | 设备适配/mock、档案快照、安全核实、生成调度、幂等、保存和推送 |
 
 ### 16.2 通用 HTTP 请求与平台 SSE 解包
 
@@ -77,13 +93,13 @@ X-Request-Id: <本次HTTP尝试的追踪UUID>
 ```
 
 - `published`用于已部署版本；排查开发版本时才显式使用 `debug`。不能把调试版本与正式验收结果混为一谈。
-- 平台会话ID只用英文、数字、`-`、`_`，最多64字符；后端生成不带个人信息的UUID，按用户和业务会话隔离，三类工作流分别保存映射。
+- 平台会话ID只用英文、数字、`-`、`_`，最多64字符；后端生成不带个人信息的UUID，按用户和业务会话隔离，四类工作流分别隔离。
 - 业务 `session_id/episode_id/followup_id`、平台会话ID、请求追踪ID分别管理。同一次逻辑请求的 `request_id` 和幂等键稳定；不同网络尝试可以有不同的追踪ID。
 - 同一业务会话可以沿用平台会话ID，但每次仍发送完整可信快照。平台会话ID不替代数据库状态、访问控制或第1.6节幂等。[官方请求参数](https://support.huaweicloud.com/api-agentarts/InvokeRuntime.html)
 
-#### 16.2.2 请求体：三条工作流完全共用这一层
+#### 16.2.2 请求体：四条工作流共用这一层
 
-业务对象见16.3–16.5。开始节点的 `request_json` 是 **String**，因此HTTP外层的 `inputs.request_json` 必须是JSON字符串，不是对象。原生 `query`不参与这三条工作流处理，可省略；不要把用户回答单独放进 `query`。
+业务对象见16.3–16.5和16.8。开始节点的 `request_json` 是 **String**，因此HTTP外层的 `inputs.request_json` 必须是JSON字符串，不是对象。原生 `query`不参与这四条工作流处理，可省略；不要把用户回答单独放进 `query`。
 
 下面是可直接发送的完整“开始档案采集”HTTP请求体：
 
@@ -100,7 +116,7 @@ X-Request-Id: <本次HTTP尝试的追踪UUID>
 ```python
 import json
 
-# business_request是16.3、16.4或16.5所列的业务对象。
+# business_request是16.3、16.4、16.5或16.8所列的业务对象。
 payload = {
     "inputs": {
         "request_json": json.dumps(business_request, ensure_ascii=False, allow_nan=False)
@@ -117,7 +133,7 @@ Python联调示例见16.2.4。截图中的静态会话ID改为后端按业务会
 
 #### 16.2.3 从平台事件中提取最终内部结果
 
-平台返回SSE，不能对整段响应直接调用 `.json()`，也不能把每个网络分片当成一条完整JSON。处理方式：按SSE帧缓存和拼接 `data:` 行，解析JSON事件；以 `event=workflow_finished` 的成功终态为准，取 `data.outputs.responseContent`，再将其中的JSON文本解析成16.3–16.5的内部对象。DSL里的End槽名 `response_content`、内部代码变量 `result_json`与HTTP最终包装字段不是同一层。
+平台返回SSE，不能对整段响应直接调用 `.json()`，也不能把每个网络分片当成一条完整JSON。处理方式：按SSE帧缓存和拼接 `data:` 行，解析JSON事件；以 `event=workflow_finished` 的成功终态为准，取 `data.outputs.responseContent`，再将其中的JSON文本解析成16.3–16.5或16.8的内部对象。DSL里的End槽名 `response_content`、内部代码变量 `result_json`与HTTP最终包装字段不是同一层。
 
 成功示意帧，仅用于说明外层结构，`responseContent`中是完整业务JSON：
 
@@ -128,7 +144,7 @@ data: {"event": "workflow_finished", "data": {"status": {"code": 1, "desc": "suc
 
 - `message`、`node_finished`、`workflow_node_message`等均不是最终可展示结果；忽略中间模型正文和推理内容。
 - `workflow_finished`的 `status.desc`须为`succeeded`，`waiting`不当成功；其状态数字与节点级数字不同，不复用业务 `code==0` 判据。
-- 遇到 `error/exception`、失败终态、意外`node_wait`、超时、断流、缺少终态、正文空白或JSON无法解析，按本节失败规则处理。本版三条任务都不依赖平台暂停等待用户回复。
+- 遇到 `error/exception`、失败终态、意外`node_wait`、超时、断流、缺少终态、正文空白或JSON无法解析，按本节失败规则处理。本版四条任务都不依赖平台暂停等待用户回复。
 - `end`只表示流结束。HTTP 200或`end`不证明内部业务成功；即使终态成功也要验证 `schema_version/workflow_version`、关联ID、字段类型、内部 `status` 和后端闸门。
 - 不从任意中间节点或任意层级递归寻找“看起来像结果”的JSON。实际渠道包装如有不同，先保存脱敏合成终态样本，明确新增一个适配分支并回归，不能猜测或静默兼容。[官方响应事件说明](https://support.huaweicloud.com/api-agentarts/agentarts_07_0056.html)
 
@@ -138,7 +154,7 @@ data: {"event": "workflow_finished", "data": {"status": {"code": 1, "desc": "suc
 
 下面示例把鉴权加载与凭据拼装移出代码，通过 `runtime_headers` 参数接收后端可信模块提供的请求头。缺少该参数不能调用；它不能来自患者浏览器或用户消息。本示例不修改运行时认证配置。
 
-示例使用 `httpx`。当前项目只在开发依赖中有它，可用于联调；正式落地客户端时按项目规范执行 `uv add httpx` 声明运行时依赖。本次仅更新文档，没有安装依赖或修改后端业务实现。
+示例使用 `httpx`，本地后端已将其声明为运行时依赖，并有独立的平台客户端。下面函数保留作独立联调参考，与项目现有客户端的函数签名不同；不应直接覆盖现有实现。本次只更新文档。
 
 ```python
 from __future__ import annotations
@@ -226,6 +242,7 @@ async def invoke_workflow(
 | Profile | 16.1的Profile地址 | 16.4或`profile-start.request.json` | `clear-complaint.profile-intake.workflow.v1` | 建议30 |
 | Followup | 16.1的Followup地址 | 16.5或`followup-supplement.request.json` | `clear-complaint.followup-supplement.workflow.v1` | 最多8，不重试 |
 | Triage | 16.1的Triage地址 | 16.3或`triage-generate.request.json` | `clear-complaint.triage.workflow.v1` | 建议最多50，整体业务仍限60 |
+| Daily | 16.1的Daily地址 | 16.8或`requests/daily-summary.request.json` | `clear-complaint.daily-companion.workflow.v1` | 建议60，具体由日报业务层配置 |
 
 - `client`由后端统一管理；`runtime_headers`由独立私有凭据模块按工作流生成；`platform_session_id`由后端保存，不写死截图值。
 - 只传业务对象，函数内部自动包装 `inputs.request_json`，不能再传整个 `*.http.json`，否则会重复包装。
@@ -237,7 +254,7 @@ async def invoke_workflow(
 
 用途：后端完成归一化、固定字段澄清和红旗检查后，调用本工作流检索资料、生成结构化草稿并做本轮工程校验。前端继续使用第 5 节的业务接口，不直接调用平台。
 
-本节依据本地导出 `workflow_Triage-Workflow-MainFlow-IO-GenerationFix_20261121.jsonl` 及对应代码核对：输入协议为 `clear-complaint.triage.request.v1`，输出协议为 `clear-complaint.triage.workflow.v1`，工作流版本为 `2026-11-21.mainflow-io.3`。这些是本地契约基线；实际发布版本需联调时核对返回的 `workflow_version`，本文不表示已验证云端部署内容。
+本节依据本地导出 `workflow_Triage-Workflow-MainFlow-Duration-Clarification-Fix_20261124.jsonl` 及对应代码核对：输入协议为 `clear-complaint.triage.request.v1`，输出协议为 `clear-complaint.triage.workflow.v1`，工作流版本为 `2026-11-24.mainflow-io.4`。这些是本地契约基线；实际发布版本需联调时核对返回的 `workflow_version`，本文不表示已验证云端部署内容。
 
 #### 16.3.1 业务输入 `request_json`
 
@@ -422,12 +439,12 @@ uv run python tools/patch_triage_workflow.py INPUT.jsonl ../output/workflow_Tria
 | `clarifying` | 接受本轮合法字段回答，保存原话并确定性合并字段；补充后重新执行红旗规则；继续澄清或进入生成 |
 | `generating` | 不并发追加第二份生成任务，不覆盖正在执行的快照；后端处理幂等与状态冲突，保留用户已填内容 |
 | `failed` | 使用第 5.4 节重试流程，复用原问诊与已保存回答，不清空已收集信息 |
-| `ready` | 原结果用于展示与受限问答；需要重新评估的新情况使用新问诊入口，可预填原主诉和新增情况供用户确认，不覆盖旧草稿 |
+| `ready` | 原结果用于展示；受限问答尚未提供公开入口，需要重新评估的新情况使用新问诊入口，可预填原主诉和新增情况供用户确认，不覆盖旧草稿 |
 | `saved/expired` | 不恢复原问诊生成，按业务规则创建新问诊；`saved` 为终态 |
 
 同一次生成前的补充保持 `episode_id`，每次调用提交合并后的完整 `normalized/profile_snapshot/clarification` 快照，不只传一句“三天了”。原始主诉逐字保留，补充回答另行保存；明确更正由后端核对并更新，不能机械拼接矛盾值。
 
-工作流没有跨调用记忆，不返回旧版 `next_state_json`。后端负责身份归属、已答字段、问题轮次、请求幂等、当前状态、草稿、证据与核验记录的持久化和恢复。第 5.10 节结果页受限问答只使用已核验引用及模板，不重新检索、不调用本工作流、不改定档；新症状需重新评估时走新问诊。
+工作流没有跨调用记忆，不返回旧版 `next_state_json`。后端负责身份归属、已答字段、问题轮次、请求幂等、当前状态、草稿、证据与核验记录的持久化和恢复。第 5.10 节结果页受限问答为待实现设计，约定只使用已核验引用及模板，不重新检索、不调用本工作流、不改定档；新症状需重新评估时走新问诊。
 
 ### 16.4 Profile-Intake-Workflow
 
@@ -856,7 +873,7 @@ DSL 模型节点配置 6 秒、重试 0 次，用于留出其他步骤时间，�
 
 以上异常一律保留已计算的第一层，令 `supplement=null`，随访记录标记降级，公开响应仍按现有随访成功形状交付。不能依赖工作流在自身失联时返回降级 JSON，也不能为了补充层失败而重跑第一层或重复处理提醒。
 
-本次文档约定了调用数据及责任分工，不表示后端平台客户端、目录审批、状态存储或公开接口已经实现；上线前仍需对三个实际运行时分别完成鉴权、终态解析和超时降级联调。
+本地已有原三条工作流客户端及随访补充接入；具体版本、目录审批和部署状态仍由后端负责人按实际环境核对。新增Daily见16.8。
 
 ### 16.6 后端处理、超时与状态接续
 
@@ -897,7 +914,7 @@ DSL 模型节点配置 6 秒、重试 0 次，用于留出其他步骤时间，�
 | 问诊 `generating`收到重复请求 | 按第1.6节附着/回放，防止并发覆盖 | 不凭相同 `request_id`假定平台自动去重 |
 | 问诊 `failed`重试 | 复用本问诊和已收集信息，按后端重试规则处理 | 完整原快照，不清空追问轮次 |
 | 问诊 `ready/saved`后出现新健康情况 | 按当前主流程新建问诊，原结果保持可追溯 | 新 `episode_id`，用户确认后的新主诉和独立快照 |
-| 结果页询问“为什么这样建议” | 走第5.10节受限问答，读本问诊已核验引用 | 不调用这三条工作流 |
+| 结果页询问“为什么这样建议” | 第5.10节为规划能力，当前未提供此公开问答路由；不得假装已能连续追问 | 不调用这三条工作流 |
 | 档案采集继续回答 | 保持采集会话，保存临时表单、已跳过/未知字段和当前问题 | Profile完整临时快照和本轮原话 |
 | 随访提交 | 按提醒归属和处理状态防重，先算第一层；仅适用时补第二层 | Followup的既有问诊快照和已批准目录 |
 
@@ -912,14 +929,14 @@ DSL 模型节点配置 6 秒、重试 0 次，用于留出其他步骤时间，�
 | `profile-start.request.json` / `.http.json` | 档案采集首轮：内层业务对象 / 可直接发送的HTTP Body |
 | `profile-answer.request.json` / `.http.json` | 同一采集会话回答出生日期，仍需后端真实保存首轮状态 |
 | `triage-generate.request.json` / `.http.json` | Triage完整合成请求，是否有草稿取决于实际知识库与模型 |
-| `triage-clarify.request.json` / `.http.json` | 缺持续时长的防御性追问请求，预期 `needs_clarification` |
+| `triage-clarify.request.json` / `.http.json` | 首轮多缺项的防御性追问请求，预期 `needs_clarification` |
 | `followup-supplement.request.json` / `.http.json` | Followup允许第二层的合成目录请求，仅用于软件联调 |
 
 `*.request.json`用于平台手工试运行或由后端自行序列化；`*.http.json`用于HTTP调用。不要把后者完整粘进开始节点的 `request_json`，也不要把前者直接作为最外层Body发给平台。
 
 上线前至少完成以下合成用例；本次只验证本地请求与DSL契约，不声明已通过下列云端验收：
 
-1. 三个新URL分别使用对应的Key，收到预期schema/版本/业务关联ID。用错Key能受控失败，不把401发成患者登录过期。
+1. 四个URL分别使用对应的Key，收到预期schema/版本/业务关联ID。用错Key能受控失败，不把401发成患者登录过期。
 2. 正常Profile首轮出现一个问题；回答后保留出生日期，进入下一字段；`ready_for_confirmation`后仍需用户确认。跳过或明确未知不能变成“无病史”。
 3. Triage完整输入进入检索；无证据返回 `insufficient_evidence`并由后端兜底，不反复要求用户补背景。真实草稿还要过后端引用/词表/模板闸门。
 4. Triage缺持续时间时返回字段请求；后端映射到 `duration_text`，回答后传完整新快照；重试不重复累计轮次。
@@ -928,4 +945,560 @@ DSL 模型节点配置 6 秒、重试 0 次，用于留出其他步骤时间，�
 7. 平台SSE跨网络分片、中文UTF-8截断、非成功终态、空正文与断流均能正确处理；中间模型内容不进入前端。
 8. 同一请求重复提交、同一幂等键不同Body、迟到的旧结果和跨用户会话访问均有受控处理。
 
-当前还需要后端负责人落地：平台客户端与终态解包、配置/密钥注入、两个方向的字段适配、请求幂等及超时、档案采集临时状态与公开入口、规则与受控目录、最终核验/模板及持久化。这些属于待实现清单，不因本文件有调用路径而视为完成。
+原三条工作流的本地实现状态以当前代码为准，不再把已存在的平台客户端、Settings和规则统称为未实现。此次新增Daily仍需后端接入：daily配置/客户端映射、设备日聚合或mock、授权档案快照、日报触发、幂等与保存/展示；本次文档不代表这些业务能力已上线。
+
+
+
+#### 16.7.1 当前代码的接入状态
+
+| 能力 | 当前状态与边界 |
+| --- | --- |
+| 通用平台客户端与原三条 Settings | 已有；实际客户端见 `backend/app/agent/client.py`，只登记 profile / followup / triage。客户端核对 schema 与 request_id，**尚未强制校验 workflow_version**；交接验收必须另行核对版本表，不能写成已自动拦截版本不匹配。 |
+| Triage | 业务创建、澄清、跳过、重试已接入；后端传输时长规范化与缺项补问修复已落地。工作流修订是否已在发布接口生效，仍以真实终态为准。 |
+| Profile | 传输配置已有；普通账户档案通过 GET /api/profile、PUT /api/profile 管理。16.4.4 的引导采集临时会话与公开业务入口尚未实现，不等于已有对话式建档接口。 |
+| Followup | 已接入提醒回复后的第二层补充；原问诊准备清单关联所需 episode_id 尚未由提醒接口返回，前端暂留查看记录提示，不新增后端字段。 |
+| Daily | 保留 16.8 的平台协议；Settings、客户端映射、日聚合、日报路由、保存和推送尚未接入。不能直接把四条 URL 都交给现有 name 映射客户端调用。 |
+| 其他规划 | 病历上传／OCR、结果后的连续问答、独立约束详情、纠偏评分和前后效果比较没有完整可用的真实接口；保留边界提示，不填模拟结果冒充已接入。 |
+
+#### 16.7.2 修订版优先回归顺序
+
+交接包内 `tests/` 有 28 组样例和每组预期结果：T01–T19 为 Triage，P01–P05 为 Profile，F01–F04 为 Followup。`.request_json.txt` 粘贴到控制台的 request_json 字符串框；`.inputs.json` 是 inputs 对象的内容，使用 HTTP 工具时还需外包 `{ "inputs": ... }`。`requests/*.http.json` 则已包含 inputs 外层，可直接作为 HTTP Body。
+
+| 用例 | 验收点 |
+| --- | --- |
+| T01 → T02 → T03 | 首轮最多五问，下一轮单独补问 medication，回答 unknown 后停止重复追问且不改成没用药。每份输入是完整快照，不依赖平台记忆。 |
+| T04–T11 | 两天、一周、3天、1 周、1–3 天、4–7 天、不到 1 天、1 周以上均能合法进入检索，规范化不能丢掉区间或限定词。 |
+| T12–T14 | 明确未知、整体跳过、五轮上限；保留缺项事实，不强迫编造答案。 |
+| T15–T18 | 非法档案、已保存状态、空主诉、确定性红旗分支。红旗只由后端实际规则得出。 |
+| T19 | 仅给 Prepare-Evidence 节点使用：空检索池返回 NO_RETRIEVAL_EVIDENCE、draft=null、needs_backend_fallback=true，不能贴到开始节点。 |
+| P03–P05、F02–F04 | 城市选填；未知过敏与明确无过敏不同；随访急诊不降级，目录或准备项不足时保留第一层建议。 |
+
+`can_generate=true` 只证明能继续检索／生成，不保证 draft_ready；空检索仍必须按真实原因降级。仓库后端会兜底，但不能据此掩盖发布版本错误。实际新调用使用独立会话 ID，完整发送快照，避免不同问诊误用同一平台会话。
+
+### 16.8 Daily-Health-Companion-Workflow：每日健康关怀
+
+#### 16.8.1 接入状态、地址与边界
+
+更新日期：2026-11-24。新增的第四条工作流，汇总当天手表记录并结合后端提供的健康档案，生成侧重理解、鼓励和温和提醒的每日小结。
+
+| 项目 | 当前约定 |
+| --- | --- |
+| 方法 | `POST` |
+| 运行时 | `agent-arts-fe15b614a68241f0b850005b9b325630` |
+| 请求 schema_version | `clear-complaint.daily-companion.request.v1` |
+| 响应 schema_version | `clear-complaint.daily-companion.workflow.v1` |
+| workflow_version | `2026-11-24.daily-companion.1` |
+| 开始节点业务输入 | `request_json`，String |
+| 原生 query | 不参与处理，可省略或留空 |
+| 附件记录的控制台验证 | 控制台合成样例返回 `status=ready`、`model_selection_applied=true` |
+| 本次未验证 | 使用截图密钥调用发布URL、真实HTTP响应和SSE终态；发布版本仍应核对 |
+| 后端接入状态 | 本地 `backend/app/agent/client.py` 仍只有 profile/followup/triage 映射，daily 尚需登记 |
+| 独立记忆库输入 | 当前无 `user_memory` 接口，额外字段不会自动传给模型 |
+
+调用URL：
+
+```text
+https://defaultgw-mqytamjqmn.cn-southwest-2.huaweicloud-agentarts.com/runtimes/agent-arts-fe15b614a68241f0b850005b9b325630/invocations
+```
+
+该URL属于每日总结专用运行时，不复用问诊、随访或档案采集的URL。请求头沿用16.2；调用凭据见单独私密交付的《鉴权信息-仅后端.md》。公开配置只登记：
+
+```dotenv
+AGENTARTS_DAILY_COMPANION_URL=https://defaultgw-mqytamjqmn.cn-southwest-2.huaweicloud-agentarts.com/runtimes/agent-arts-fe15b614a68241f0b850005b9b325630/invocations
+```
+
+这是**后端调用平台的内部接口**。没有在本次文档工作中新增清诉 `/api` 路由、数据库表、定时任务或推送服务。前端的业务入口、ApiResponse包装和保存策略由后端落地后另行约定；前端不持有平台密钥。
+
+#### 16.8.2 业务请求字段
+
+后端把下表对象序列化成字符串，放入 `inputs.request_json`。不能只发送截图里的 `query: 你好`，也不能将内层对象直接作为整份HTTP Body。
+
+| 字段 | 必填 | 类型与约定 |
+| --- | --- | --- |
+| `schema_version` | 是 | 固定为请求协议版本 |
+| `request_id` | 是 | 后端生成，非空字符串，最多100字符；关联一次逻辑生成，不能代替幂等控制 |
+| `report_date` | 是 | 小结对应日，`YYYY-MM-DD`；不一定是调用当天 |
+| `timezone` | 否 | 本版只接受 `Asia/Shanghai`，缺省也取该值 |
+| `data_source` | 是 | `mock` 或 `device`；mock正文显式带模拟标记 |
+| `watch_data` | 是 | 见16.8.3，由后端mock程序或设备适配器提供 |
+| `health_archive` | 否 | 见16.8.4，后端检索并整理的授权档案摘要；无档案可传 `{}` |
+| `baseline` | 否 | 见16.8.5，同设备、同口径的个人历史统计；没有就省略 |
+| `safety_context` | 否 | 见16.8.5；未明确批准的活动/睡眠计划不形成对应个体化任务 |
+
+限制：请求JSON字符串最多180000字符；构建后的模型上下文最多65000字符。问诊摘要与病历摘要各最多60条，每条最多800字符，疾病最多30条，照护建议最多40条。超限返回 `invalid_input`，不会静默截断后声称已读完整档案。原图、PDF、全天逐秒采样和ECG波形应由其他流程处理，本接口接收摘要和结构化日聚合。
+
+#### 16.8.3 手表数据：25项全部有字段，但不要求每项都有值
+
+`watch_data`：
+
+| 字段 | 约定 |
+| --- | --- |
+| `date` | 必须与 `report_date` 一致 |
+| `wear_minutes` | 必填，0～1440，表示当天佩戴分钟；不证明所有传感器都有相同时长的有效覆盖 |
+| `device` | 对象；建议有稳定 `id`，可带 `brand/model`；基线比较要求ID一致 |
+| `metrics` | 对象，键名严格按下表；暂时没有的数据传null或省略，不能用0充当缺失 |
+
+普通数值格式示例：
+
+```json
+{"value":64,"unit":"bpm","quality":"usable"}
+```
+
+`quality=usable` 才用于回顾；低质量、类型不符、错误单位和工程范围不符的项进入 `excluded_metrics`，不会阻止其他有效指标生成总结。工作流不按这些范围判断健康正常或异常。
+
+| 项目 | `metrics` 中的键 | 约定 |
+| --- | --- | --- |
+| 心率 HR | `hr` | `{avg,min,max,unit:"bpm",quality:"usable"}`，按日聚合 |
+| 静息心率 RHR | `rhr` | 普通数值，`bpm` |
+| 心率变异性 HRV | `hrv` | 普通数值，`ms`，另带 `method`，例如 `RMSSD` |
+| 血氧 SpO₂ | `spo2` | 普通数值，`%`，传97而不是0.97 |
+| 血压 | `blood_pressure` | `{systolic,diastolic,unit:"mmHg",source_type,quality:"usable"}` |
+| 心电 ECG | `ecg` | `{recorded:true,device_label,quality:"usable"}`；不传波形，不做AI心电诊断 |
+| 呼吸频率 | `respiratory_rate` | 普通数值，`breaths/min` |
+| 皮肤温度 | `skin_temperature` | 普通数值，`C`；不能当成核心体温或发热判断 |
+| 睡眠时长 | `sleep_duration` | 普通数值，`min` |
+| 深睡时长 | `deep_sleep` | 普通数值，`min` |
+| 浅睡时长 | `light_sleep` | 普通数值，`min` |
+| REM时长 | `rem_sleep` | 普通数值，`min` |
+| 夜间觉醒次数 | `awakenings` | 普通数值，整数，`count` |
+| 步数 | `steps` | 普通数值，整数，`count` |
+| 行走距离 | `distance` | 普通数值，`km` |
+| 消耗热量 | `calories_burned` | 普通数值，`kcal`；定义本日设备估算总消耗，不能与仅活动热量混用，不计算减重或节食任务 |
+| 运动时长 | `exercise_duration` | 普通数值，`min` |
+| 运动类型 | `activity_type` | `{value,quality:"usable"}`；`walking/running/cycling/swimming/strength/other/none` |
+| 运动强度 | `activity_intensity` | `{value,quality:"usable"}`；`light/moderate/vigorous/mixed/unknown` |
+| 最大摄氧量 | `vo2_max` | 普通数值，`ml/kg/min`，只展示设备估算 |
+| 心率恢复 | `hrr` | 普通数值，`bpm`，另带 `interval_seconds`；例如60秒，负值也可被记录，不据此判病 |
+| 压力指数 | `stress_level` | 普通数值，`score`，另带 `scale_min/scale_max`；不当成心理诊断 |
+| 跌倒检测 | `fall_detection` | `{detected:true或false,quality:"usable"}`；true代表待核实的设备事件 |
+| 身体能量/恢复指数 | `recovery_score` | 普通数值，`score`，另带 `scale_min/scale_max` |
+| 女性生理周期 | `menstrual_cycle` | `{status,quality:"usable"}`；`not_applicable/not_provided/unknown/menstruation/follicular/ovulatory/luteal` |
+
+补充约定：
+
+- 血压 `source_type`：`upper_arm_cuff`、`watch_estimate`、`other_device`。来源必须如实保留，不能把手表估算写成袖带实测。
+- ECG `device_label`：`normal`、`inconclusive`、`abnormal`、`unknown`。设备标签不等于临床诊断。
+- 睡眠总时长不含清醒时长；三个分期之和超过总时长15分钟时排除分期数据，保留可用总时长。15分钟是原型的工程容差。
+- 本版不计算通用健康评分、不根据压力/恢复分数追问心理状态，也不对周期状态推断怀孕或生育能力。
+- 本版只接收后端按日整理的数据，不接收全天逐秒序列。后端负责日界线、时区、去重、设备口径、质量判定和采样日期核对。
+
+后端负责按上海时区聚合、采样日期校验、去重、统计口径、设备质量标记。血压来源、HRV算法、HRR间隔和厂家分值量表要如实保留，不能把不同口径混用。设备不支持的项无需伪造。
+
+#### 16.8.4 健康档案输入：后端提供，模型读取
+
+| 字段 | 内容 |
+| --- | --- |
+| `snapshot_id` | 本次档案快照标识，建议必传，便于追溯 |
+| `profile` | 支持 `preferred_name`、`age`、`sex`；只传已获授权且需要的画像字段 |
+| `confirmed_conditions` | `id/name/status/source_record_id`，只认 `status=confirmed` 且来源能在本次档案找到的疾病 |
+| `consultations` | 问诊摘要数组；每条为 `id/occurred_on/summary` |
+| `medical_records` | 病历摘要数组；每条为 `id/occurred_on/summary` |
+| `care_guidance` | 当前有效、已确认的个体化照护安排；详见下表 |
+
+所有问诊/病历的 `id` 必须唯一。`occurred_on` 用有效的 `YYYY-MM-DD`。档案摘要被当作数据读取，不执行其中的指令。未确认的问诊候选疾病不能转成确诊。
+
+`care_guidance`：
+
+| 字段 | 约定 |
+| --- | --- |
+| `id` | 当前请求内唯一的照护建议标识 |
+| `record_id` | 来源问诊或病历ID，必须存在 |
+| `condition_id` | 已确认疾病ID，必须存在且有可追溯来源 |
+| `topic` | `activity`、`sleep`、`routine` |
+| `confirmed` | 只有true才可以被引用；后端不得把未审核模型建议自动标成true |
+| `text` | 已确认安排的原文，最多300字符；用药剂量、停换药和保证疗效等不进入本版建议 |
+| `target` | 可选，`metric/min/max`；只支持steps、exercise_duration、sleep_duration的既有个人区间 |
+
+没有个人目标时不要自行补默认步数/睡眠达标线。当前版本的“与疾病联系”通过有来源的个人目标回顾形成，不让模型凭一般常识自创疾病改善或伤害结论。后端应只传当前有效、没有未解决冲突的照护安排。
+
+**记忆库边界**：当前输入只有上述健康档案和个人基线，不包含独立的偏好记忆、生活事件记忆或 `user_memory`。直接在JSON增加该字段，本版准备节点不会把它交给模型。若后续增加记忆库，应同时更新工作流输入解析、模型上下文、模板选择规则和协议版本；本次文档没有假装已经支持这项功能。
+
+#### 16.8.5 个人基线和后端安全标记
+
+`baseline` 的完整25项样例未随本次附件提供，待 Daily DSL／原样例交付后核对；不将推测数据当成已验证样例。结构需要：
+
+- `device_id` 与本次设备一致；`days` 至少7天。
+- `metrics` 支持steps、sleep_duration、rhr、hrv；每项为 `mean/unit`，HRV另带同口径的method。
+- 单位及method一致才生成观察差值，不标好坏、不推测原因；不匹配就跳过比较。
+- 7天是原型最低信息量约定，不是医学诊断阈值；后端另行保证历史样本质量。
+
+`safety_context` 示例：
+
+```json
+{"review_required":false,"activity_allowed":true,"sleep_advice_allowed":true}
+```
+
+- `activity_allowed=true`：后端确认可以引用已有活动安排，不是工作流新开运动处方。
+- `sleep_advice_allowed=true`：后端允许引用本次档案的既有作息安排。
+- 未提供或null不会视为允许；仍可生成事实回顾和一般关怀。
+- 后端 `review_required=true`，或可用指标中 `fall_detection.detected=true`、ECG标签为abnormal/inconclusive时，返回 `review_required`，跳过模型并暂停活动任务。
+- 工作流不内置临床生命体征告警阈值，不修改现有分诊档位；后端红旗、紧急情况和实时告警独立处理，不能等待日报触发。
+
+#### 16.8.6 可复制的合成请求与后端调用示例
+
+下面是内层业务对象，结构与已跑通的控制台简版用例一致。所有信息及目标为合成测试数据，不构成任何疾病的通用医学目标。
+
+```json
+{
+  "schema_version": "clear-complaint.daily-companion.request.v1",
+  "request_id": "SYNTHETIC-DAILY-TEST-001",
+  "report_date": "2026-11-23",
+  "timezone": "Asia/Shanghai",
+  "data_source": "mock",
+  "watch_data": {
+    "date": "2026-11-23",
+    "wear_minutes": 1380,
+    "device": {
+      "id": "MOCK-WATCH-001",
+      "brand": "Synthetic",
+      "model": "Demo"
+    },
+    "metrics": {
+      "steps": {
+        "value": 4600,
+        "unit": "count",
+        "quality": "usable"
+      },
+      "exercise_duration": {
+        "value": 22,
+        "unit": "min",
+        "quality": "usable"
+      },
+      "sleep_duration": {
+        "value": 435,
+        "unit": "min",
+        "quality": "usable"
+      },
+      "rhr": {
+        "value": 64,
+        "unit": "bpm",
+        "quality": "usable"
+      },
+      "activity_type": {
+        "value": "walking",
+        "quality": "usable"
+      }
+    }
+  },
+  "health_archive": {
+    "snapshot_id": "SYNTHETIC-ARCHIVE-001",
+    "profile": {
+      "preferred_name": "演示用户",
+      "age": 68,
+      "sex": "female"
+    },
+    "confirmed_conditions": [
+      {
+        "id": "CONDITION-001",
+        "name": "高血压（合成演示）",
+        "status": "confirmed",
+        "source_record_id": "MEDICAL-001"
+      }
+    ],
+    "consultations": [
+      {
+        "id": "CONSULTATION-001",
+        "occurred_on": "2026-11-20",
+        "summary": "合成问诊记录：用户希望回顾自己的活动和作息，并获得温和的鼓励。"
+      }
+    ],
+    "medical_records": [
+      {
+        "id": "MEDICAL-001",
+        "occurred_on": "2026-11-18",
+        "summary": "纯合成病历：已确认高血压，已有个体化活动安排。以下步数区间仅用于测试，不是高血压通用医学目标。"
+      }
+    ],
+    "care_guidance": [
+      {
+        "id": "GUIDANCE-001",
+        "record_id": "MEDICAL-001",
+        "condition_id": "CONDITION-001",
+        "topic": "activity",
+        "confirmed": true,
+        "text": "按此前确认的个人安排，在身体舒适的前提下分段步行。",
+        "target": {
+          "metric": "steps",
+          "min": 3000,
+          "max": 6000
+        }
+      }
+    ]
+  },
+  "safety_context": {
+    "review_required": false,
+    "activity_allowed": true,
+    "sleep_advice_allowed": true
+  }
+}
+```
+
+发送前包装：
+
+```python
+import json
+
+payload = {
+    "inputs": {
+        "request_json": json.dumps(daily_request, ensure_ascii=False, allow_nan=False)
+    }
+}
+```
+
+示例文件：
+
+- [简版内层业务对象](requests/daily-summary.request.json)
+- [简版完整HTTP Body](requests/daily-summary.http.json)
+- 全部25项填值样例：原附件仅列出文件名，未提供实际文件，本次不伪造或附上失效下载链接；字段表仍见16.8.3。
+- [无健康档案内层对象](requests/daily-no-archive.request.json)：由简版合成输入移除档案构造，尚未运行 Daily DSL。
+- [待核实提示内层对象](requests/daily-review.request.json)：由简版合成输入置 review_required=true 构造，尚未运行 Daily DSL。
+
+下面复用16.2.4的**独立联调函数**，认证请求头由可信后端模块提供，示例正文不含鉴权值：
+
+```python
+async def call_daily(client, daily_request, runtime_headers, platform_session_id):
+    result = await invoke_workflow(
+        client=client,
+        url="https://defaultgw-mqytamjqmn.cn-southwest-2.huaweicloud-agentarts.com/runtimes/agent-arts-fe15b614a68241f0b850005b9b325630/invocations",
+        business_request=daily_request,
+        runtime_headers=runtime_headers,
+        platform_session_id=platform_session_id,
+        expected_schema="clear-complaint.daily-companion.workflow.v1",
+        total_seconds=60,
+    )
+    if result.get("workflow_version") != "2026-11-24.daily-companion.1":
+        raise ValueError("每日总结工作流版本不匹配")
+    if result.get("report_date") != daily_request.get("report_date"):
+        raise ValueError("每日总结日期不匹配")
+    if result.get("data_source") != daily_request.get("data_source"):
+        raise ValueError("模拟/真实数据来源不匹配")
+    return result
+```
+
+项目现有 `backend/app/agent/client.py` 的 `invoke_workflow` 采用工作流名称映射，签名与上面独立联调函数不同，不应直接覆盖它。落地时在Settings、URL/Key映射、请求/响应schema映射和超时表中增加 `daily`，再由业务层调用现有客户端。建议工程总预算60秒；不是临床或既有业务SLA承诺。
+
+#### 16.8.7 SSE解包和内部响应
+
+平台最终结果按16.2.3提取：
+
+```text
+workflow_finished
+  → data.status.desc == succeeded
+  → data.outputs.responseContent
+  → JSON解析
+  → 检查schema、版本、request_id、report_date、data_source、快照和内部status
+```
+
+HTTP 200只表示HTTP层成功。模型节点的raw_output不是最终小结，不能转发给患者。以下为原附件给出的本地合成渲染返回示例，用于说明结构；它不是发布URL的HTTP抓包结果：
+
+```json
+{
+  "schema_version": "clear-complaint.daily-companion.workflow.v1",
+  "workflow_version": "2026-11-24.daily-companion.1",
+  "request_id": "SYNTHETIC-DAILY-TEST-001",
+  "report_date": "2026-11-23",
+  "data_source": "mock",
+  "status": "ready",
+  "summary": {
+    "title": "今天的健康小结",
+    "greeting": "今天辛苦了，我们一起回看设备留下的记录。",
+    "highlights": [
+      {
+        "id": "metric:steps",
+        "label": "步数",
+        "text": "今天设备记录了4600步。",
+        "source_refs": [
+          "watch_data.metrics.steps"
+        ]
+      },
+      {
+        "id": "metric:exercise_duration",
+        "label": "运动时长",
+        "text": "设备记录的运动时长为22分钟。",
+        "source_refs": [
+          "watch_data.metrics.exercise_duration"
+        ]
+      },
+      {
+        "id": "metric:sleep_duration",
+        "label": "睡眠时长",
+        "text": "设备记录的睡眠时长为435分钟。",
+        "source_refs": [
+          "watch_data.metrics.sleep_duration"
+        ]
+      }
+    ],
+    "health_connections": [
+      {
+        "id": "connection:GUIDANCE-001",
+        "label": "与个人照护目标的联系",
+        "text": "关于“高血压（合成演示）”的原有安排：今天的步数记录落在档案已确认的个人目标区间内，这份投入值得肯定；这不代表疾病已经改善。",
+        "source_refs": [
+          "health_archive.care_guidance.GUIDANCE-001",
+          "health_archive.records.MEDICAL-001",
+          "watch_data.metrics.steps"
+        ],
+        "record_id": "MEDICAL-001",
+        "condition_id": "CONDITION-001"
+      }
+    ],
+    "gentle_reminders": [
+      {
+        "id": "quality",
+        "label": "记录完整度",
+        "text": "部分指标没有提供或未通过质量检查，今天只根据可用记录回看，不把缺失项当成正常。",
+        "source_refs": []
+      }
+    ],
+    "tomorrow_actions": [
+      {
+        "id": "action:GUIDANCE-001",
+        "label": "沿用已确认安排",
+        "text": "关于档案中已确认的“高血压（合成演示）”，原有照护安排是：“按此前确认的个人安排，在身体舒适的前提下分段步行。”。请按这份已确认安排继续，不因设备分数自行加量。",
+        "source_refs": [
+          "health_archive.care_guidance.GUIDANCE-001",
+          "health_archive.records.MEDICAL-001"
+        ],
+        "record_id": "MEDICAL-001",
+        "condition_id": "CONDITION-001"
+      }
+    ],
+    "closing": "照顾自己不必追求满分，今天愿意回看自己的状态，就已经是在认真对待自己。",
+    "limitations": "手表记录和单日变化不能用来判断疾病好转或恶化；缺失数据不表示正常。"
+  },
+  "rendered_text": "【模拟数据演示】\n\n今天的健康小结\n\n今天辛苦了，我们一起回看设备留下的记录。\n\n今天设备记录了4600步。\n\n设备记录的运动时长为22分钟。\n\n设备记录的睡眠时长为435分钟。\n\n关于“高血压（合成演示）”的原有安排：今天的步数记录落在档案已确认的个人目标区间内，这份投入值得肯定；这不代表疾病已经改善。\n\n部分指标没有提供或未通过质量检查，今天只根据可用记录回看，不把缺失项当成正常。\n\n关于档案中已确认的“高血压（合成演示）”，原有照护安排是：“按此前确认的个人安排，在身体舒适的前提下分段步行。”。请按这份已确认安排继续，不因设备分数自行加量。\n\n照顾自己不必追求满分，今天愿意回看自己的状态，就已经是在认真对待自己。\n\n手表记录和单日变化不能用来判断疾病好转或恶化；缺失数据不表示正常。",
+  "metric_overview": [
+    {
+      "id": "metric:rhr",
+      "label": "静息心率",
+      "text": "设备记录的静息心率为64次/分。",
+      "source_refs": [
+        "watch_data.metrics.rhr"
+      ]
+    },
+    {
+      "id": "metric:sleep_duration",
+      "label": "睡眠时长",
+      "text": "设备记录的睡眠时长为435分钟。",
+      "source_refs": [
+        "watch_data.metrics.sleep_duration"
+      ]
+    },
+    {
+      "id": "metric:steps",
+      "label": "步数",
+      "text": "今天设备记录了4600步。",
+      "source_refs": [
+        "watch_data.metrics.steps"
+      ]
+    },
+    {
+      "id": "metric:exercise_duration",
+      "label": "运动时长",
+      "text": "设备记录的运动时长为22分钟。",
+      "source_refs": [
+        "watch_data.metrics.exercise_duration"
+      ]
+    },
+    {
+      "id": "metric:activity_type",
+      "label": "活动类型",
+      "text": "设备记录的活动类型为步行。",
+      "source_refs": [
+        "watch_data.metrics.activity_type"
+      ]
+    }
+  ],
+  "data_quality": {
+    "wear_minutes": 1380,
+    "available_metric_ids": [
+      "rhr",
+      "sleep_duration",
+      "steps",
+      "exercise_duration",
+      "activity_type"
+    ],
+    "missing_metric_ids": [
+      "hr",
+      "hrv",
+      "spo2",
+      "blood_pressure",
+      "ecg",
+      "respiratory_rate",
+      "skin_temperature",
+      "deep_sleep",
+      "light_sleep",
+      "rem_sleep",
+      "awakenings",
+      "distance",
+      "calories_burned",
+      "activity_intensity",
+      "vo2_max",
+      "hrr",
+      "stress_level",
+      "fall_detection",
+      "recovery_score",
+      "menstrual_cycle"
+    ],
+    "excluded_metrics": [],
+    "baseline_comparisons": [],
+    "wear_time_note": "佩戴分钟数仅供参考，不证明每项传感器均有全天有效覆盖。",
+    "coverage_limited": false
+  },
+  "health_archive_snapshot_id": "SYNTHETIC-ARCHIVE-001",
+  "used_record_ids": [
+    "MEDICAL-001"
+  ],
+  "model_selection_applied": true,
+  "needs_backend_review": false,
+  "backend_validation_required": true,
+  "error_code": ""
+}
+```
+
+| 字段 | 后端/前端用途 |
+| --- | --- |
+| `summary` | 结构化展示标题、开场、亮点、目标联系、提醒、明日小行动和收尾 |
+| `rendered_text` | 同一内容的模板正文；按纯文本展示，mock保留模拟标记 |
+| `metric_overview` | 全部可用指标事实卡及可比较的个人基线差值，可供详情展开 |
+| `data_quality` | 区分未提供与被排除；简版样例缺少20项是预期行为 |
+| `used_record_ids` | 本次最终采用的档案来源，必须能映射回当前用户的档案快照 |
+| `health_archive_snapshot_id` | 本次档案快照标识；与调用方保存的快照关联 |
+| `model_selection_applied` | 是否应用了通过校验的模型候选选择 |
+| `needs_backend_review` | 是否进入后端待核实流程，不表示已经诊断异常 |
+| `backend_validation_required` | 固定true，不是错误；后端仍核对归属、来源、日期、结构与展示 |
+
+`source_refs` 是本协议内的逻辑溯源标识，例如 `health_archive.records.MEDICAL-001` 指向问诊/病历ID的统一来源索引，不是需要直接访问的URL或真实JSONPath。
+
+#### 16.8.8 状态、失败与保存策略
+
+| status | 处理方式 |
+| --- | --- |
+| `ready` | 模型选择合法，经模板生成小结；后端复核后可展示/保存 |
+| `degraded` | 模型正文空、格式错误或候选ID不合规，已返回可追溯的模板兜底；允许以降级标记展示，不要无限重试 |
+| `data_insufficient` | 没有可用设备指标，跳过模型；展示记录不足的温和说明，不写“全部正常” |
+| `review_required` | 设备/后端有待核实标记，暂停活动任务，交给后端安全流程；不是问诊分诊结果 |
+| `invalid_input` | 参数、内部上下文或终态不合规；检查输入，不当成正常报告保存 |
+
+内部错误码包括 `INVALID_REQUEST`、`MODEL_OUTPUT_REJECTED`、`INVALID_CONTEXT`、`INVALID_FINAL_RESULT`；不能直接复用为清诉公开API的数字业务错误码。HTTP认证、额度、网络、平台中断和超时仍由客户端处理；模型节点运行异常不保证走到模板兜底，后端必须保留失败状态。
+
+后端职责：
+
+1. 从登录身份确定用户与档案归属；不让前端上传他人档案ID或任意“已确认建议”冒充后端快照。
+2. mock程序按本协议造数据，真实设备适配另行实现；全链路保留 `data_source`，模拟记录不混入正式健康档案或真实告警。
+3. 检索授权健康档案并整理摘要；本工作流不直连数据库，不处理独立记忆库检索。
+4. 发起调用、解析成功SSE终态，复核协议、请求/日期/快照和来源。
+5. 管理每日生成时机、时区日界线、幂等、超时和重试。平台会话ID不存储完整日报业务状态；每次发送完整快照。
+6. 推荐按“当前用户＋report_date＋workflow_version”维护一份当前报告，修改输入后更新报告版本并保留来源。可额外保存输入快照摘要/哈希；迟到旧结果不能覆盖更新的报告。
+7. 保存与消息推送由后端决定；工作流不自动建表、不自动发通知、不改变问诊/随访/药物计划。
+8. 前端只调用清诉业务接口，展示日期、模拟标记、结构化栏目和必要质量提示。`ready`不代表医生确认病情，`review_required`不替代既有急诊处理。
+
+#### 16.8.9 新增联调验收
+
+- 当前用户已跑通控制台简版：5类指标、病历个人目标关联、模型选择应用、最终ready小结。
+- 本次新增登记了发布URL与私有凭据，尚未使用凭据发送网络调用；先用简版HTTP Body验证发布运行时返回相同schema与版本。
+- 再测完整25项、无档案、缺部分指标、低质量指标、无全部可用指标、待核实标记、模型空正文、认证失败和SSE断流。
+- 核对missing与excluded不同：未上传的不等于识别失败；没有基线就不输出相较昨天/上周改善。
+- 核对独立记忆库未接入，不能据请求中额外的user_memory字段宣称已经使用长期记忆。
+
+官方通用协议参考：[调用工作流](https://support.huaweicloud.com/api-agentarts/InvokeRuntime.html)、[SSE响应事件](https://support.huaweicloud.com/api-agentarts/agentarts_07_0056.html)。

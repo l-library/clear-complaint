@@ -1,0 +1,5 @@
+{
+  "inputs": {
+    "request_json": "{\"schema_version\": \"clear-complaint.followup-supplement.request.v1\", \"episode_id\": \"SYNTHETIC-EPISODE-001\", \"followup_id\": \"SYNTHETIC-FOLLOWUP-001\", \"request_id\": \"SYNTHETIC-F01-20261124\", \"first_layer\": {\"level\": \"clinic\", \"reason\": \"not_relieved\", \"text\": \"合成规则结论：门诊评估\"}, \"answers\": {\"relieved\": \"no\", \"visited\": \"no\", \"new_symptom\": \"no\"}, \"note\": \"软件合成用例：鼻部不适仍存在。\", \"normalized_snapshot\": {\"symptom\": \"鼻部不适\", \"duration\": \"三天\"}, \"original_result\": {\"triage\": \"self_observe\", \"department_primary\": \"全科医学科\", \"prep\": {\"bring\": [\"携带已保存的不适记录\"], \"describe\": [\"整理这次不适的开始时间\", \"记录与上次相比有哪些变化\"], \"go_now\": []}}, \"catalogs\": {\"version\": \"synthetic-demo.v1-not-clinically-validated\", \"watch_for\": [{\"id\": \"demo-obs-1\", \"text\": \"鼻部不适是否仍存在\"}, {\"id\": \"demo-obs-2\", \"text\": \"日常活动是否受影响\"}], \"questions\": [{\"id\": \"demo-question-1\", \"text\": \"这次不适对日常活动有什么影响？\"}]}}"
+  }
+}
