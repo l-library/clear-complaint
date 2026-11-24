@@ -139,14 +139,39 @@ def test_city_pair_must_arrive_together(db_client: TestClient) -> None:
 
     only_code = _put_profile(db_client, data, city_code="310100")
     assert only_code.status_code == 400
-    assert "city" in _body(only_code)["message"]
+    assert "城市" in _body(only_code)["message"]
 
     ok = _put_profile(db_client, data, city_code="310100", city_name="上海市")
     assert ok.status_code == 200
+    assert _body(ok)["data"]["city_name"] == "上海市"
 
     cleared = _put_profile(db_client, data, city_code=None, city_name=None)
     assert cleared.status_code == 200
     assert _body(cleared)["data"]["city_code"] is None
+
+
+def test_city_pair_empty_strings_mean_unfilled(db_client: TestClient) -> None:
+    """前端表单把留空的城市发成空串；空串按未填处理，保存不能被挡住。"""
+    data = _register(db_client, "13800000008")
+
+    # 只传空串等于成对清空
+    cleared = _put_profile(db_client, data, city_code="", city_name="")
+    assert cleared.status_code == 200
+    assert _body(cleared)["data"]["city_code"] is None
+
+    # 一边填了一边空：提示同时填写，而不是甩 6 位校验错误
+    half = _put_profile(db_client, data, city_code="", city_name="上海市")
+    assert half.status_code == 400
+    assert "同时填写" in _body(half)["message"]
+
+
+def test_city_code_format_error_is_human_readable(db_client: TestClient) -> None:
+    data = _register(db_client, "13800000009")
+
+    bad = _put_profile(db_client, data, city_code="31010", city_name="上海市")
+
+    assert bad.status_code == 400
+    assert "110100" in _body(bad)["message"]
 
 
 def test_birth_date_bounds(db_client: TestClient) -> None:

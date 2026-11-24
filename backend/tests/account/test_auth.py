@@ -202,5 +202,6 @@ def test_meta_privacy_is_public(db_client: TestClient) -> None:
     assert response.status_code == 200
     data = _data(response)
     assert data["current_version"] == get_settings().privacy_version
-    assert data["policy_url"]
-    assert data["sensitive_policy_url"]
+    # 按配置原样返回有效链接或空串，不能补占位假地址
+    assert data["policy_url"] == get_settings().privacy_policy_url
+    assert data["sensitive_policy_url"] == get_settings().sensitive_policy_url

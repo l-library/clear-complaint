@@ -285,7 +285,7 @@
     {
       "field": "duration_text",
       "text": "这种情况持续了多久？",
-      "options": ["不到 1 天", "1–3 天", "4–7 天", "1 周以上"],
+      "options": ["半天", "一两天", "两三天", "一周", "一周以上"],
       "allow_free_text": true
     }
   ]
@@ -356,7 +356,7 @@
 
 ### 3.3 `GET /api/meta/privacy`
 
-返回当前隐私政策版本与链接，无需鉴权。注册前用它取 `consent_version`。
+返回当前隐私政策版本与链接，无需鉴权。注册前用它取 `consent_version`。默认使用随前端交付的站内隐私说明地址，部署时可通过环境变量覆盖。显式配置为空表示尚未提供政策页面，前端应隐藏对应入口，不得展示占位地址。
 
 ```json
 { "current_version": "2026-11-01", "policy_url": "/#/pages/privacy/index?section=privacy", "sensitive_policy_url": "/#/pages/privacy/index?section=sensitive" }

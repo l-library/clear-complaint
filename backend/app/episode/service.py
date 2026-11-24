@@ -202,8 +202,8 @@ async def create_episode(
         city_code=city,
         normalized={
             "symptom": compose.build_initial_normalized(text, attribution),
-            "onset_at": None,
-            "duration_text": None,
+            # 主诉里已写明的时间先填上，平台就不会把用户答过的再问一遍
+            **compose.build_initial_times(text, attribution),
             "site": None,
             "nature": None,
             "associated": None,

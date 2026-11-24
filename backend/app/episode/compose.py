@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
@@ -62,7 +63,10 @@ QUESTION_TEMPLATES: dict[str, dict[str, Any]] = {
     "onset_at": {"text": "症状是从什么时候开始的？", "options": [], "allow_free_text": True},
     "duration_text": {
         "text": "这种情况持续了多久？",
-        "options": ["不到 1 天", "1–3 天", "4–7 天", "1 周以上"],
+        # 平台工作流解析不了含阿拉伯数字的时长（实测 3天、1 周、1–3 天 全部
+        # insufficient_evidence，选了即兜底）。选项只用平台认可的中文数量词；
+        # 改动前先对平台实测，tests/episode/test_compose.py 有守护。
+        "options": ["半天", "一两天", "两三天", "一周", "一周以上"],
         "allow_free_text": True,
     },
     "site": {"text": "不舒服的部位在哪里？", "options": [], "allow_free_text": True},
@@ -185,10 +189,44 @@ def build_platform_request(
     }
 
 
+# 首轮时间抽取。主诉里已写明病程（「发烧两天了」「持续三天」）或起点（「两天前
+# 开始」「昨天开始」）时填进首轮 normalized，平台就不会把用户答过的时间再问
+# 一遍。只认高置信句式：拿不准的留给追问，宁可多问一句也不错填一个字段，
+# 错的时间会顺着平台请求一路走到底。
+_NUMERAL = r"(?:半|[一二两三四五六七八九十]{1,2})"
+_UNIT = r"(?:天|日|周)"
+_DURATION_ONGOING_RE = re.compile(rf"({_NUMERAL})({_UNIT})了")
+_DURATION_SUSTAIN_RE = re.compile(rf"持续了?({_NUMERAL})({_UNIT})")
+_ONSET_RE = re.compile(rf"(?:{_NUMERAL}(?:天|日)前|(?:昨|前)天)(?:开始|起|出现)")
+
+
+def build_initial_times(complaint: str, attribution: str | None) -> dict[str, str | None]:
+    """从主诉提取高置信的起病时间与病程，供 create_episode 填入首轮 normalized。"""
+    text = complaint if attribution is None else _strip_attribution(complaint, attribution)
+    folded = normalize(text)
+    duration: str | None = None
+    for pattern in (_DURATION_SUSTAIN_RE, _DURATION_ONGOING_RE):
+        match = pattern.search(folded)
+        if match:
+            duration = match.group(1) + match.group(2)
+            break
+    onset_match = _ONSET_RE.search(folded)
+    return {
+        "onset_at": onset_match.group(0) if onset_match else None,
+        "duration_text": duration,
+    }
+
+
+# 平台的 symptom 检索吃不下温度数字：实测「发热最高385度咽痛和乏力」整句
+# NO_RETRIEVAL_EVIDENCE，剔除温度后同句两次 draft_ready。高热的定档走红旗
+# 规则，查的是原文，不依赖这里的 symptom。
+_DEGREE_RE = re.compile(r"(?:最高|高达|超过|烧到|到了|大约|大概|约)?\d+(?:[.．]?\d+)?(?:度|℃)")
+
+
 def build_initial_normalized(complaint: str, attribution: str | None) -> list[str]:
     """初始归一化：摘掉自我归因后折整句为 symptom（字段级抽取不在本版）。"""
     text = complaint if attribution is None else _strip_attribution(complaint, attribution)
-    folded = normalize(text)
+    folded = _DEGREE_RE.sub("", normalize(text))
     return [folded] if folded else [complaint]
 
 

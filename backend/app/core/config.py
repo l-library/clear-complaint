@@ -39,7 +39,8 @@ class Settings(BaseSettings):
     # 导出包落盘目录。CI/测试不设；生产由环境变量注入
     export_dir: str = ""
 
-    # 隐私政策版本与链接：GET /api/meta/privacy 返回，注册时校验 consent_version
+    # 隐私政策版本与链接：GET /api/meta/privacy 返回，注册时校验 consent_version。
+    # 默认使用已交付的前端站内说明页；部署可经环境变量覆盖或显式留空
     privacy_version: str = "2026-11-01"
     privacy_policy_url: str = "/#/pages/privacy/index?section=privacy"
     sensitive_policy_url: str = "/#/pages/privacy/index?section=sensitive"
