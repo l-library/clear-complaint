@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.agent.departments import contains as department_ok
 from app.agent.normalize import normalize
+from app.episode.clarification import canonical_duration
 
 if TYPE_CHECKING:
     from app.account.models import Profile
@@ -55,17 +56,6 @@ STAGE_TEXTS = {
     "compose": "正在整理建议",
     "degraded": "平台暂时不可用，已采用保守建议",
 }
-
-# 公开字段名 ↔ 平台字段名（docs/api-agentarts.md 16.3.1 的适配表）
-FIELD_TO_PLATFORM = {
-    "onset_at": "onset",
-    "duration_text": "duration",
-    "site": "location",
-    "nature": "character",
-    "associated": "associated_symptoms",
-    "medications_text": "medication",
-}
-FIELD_FROM_PLATFORM = {value: key for key, value in FIELD_TO_PLATFORM.items()}
 
 # 追问问题卡（constraints.md 约束二：按字段问，不做泛化提问）
 QUESTION_TEMPLATES: dict[str, dict[str, Any]] = {
@@ -169,7 +159,7 @@ def build_platform_request(
     platform_normalized: dict[str, Any] = {
         "symptom": " ".join(normalized_public.get("symptom") or []),
         "onset": normalized_public.get("onset_at"),
-        "duration": normalized_public.get("duration_text"),
+        "duration": canonical_duration(normalized_public.get("duration_text")),
         "location": normalized_public.get("site"),
         "character": normalized_public.get("nature"),
         "associated_symptoms": normalized_public.get("associated"),

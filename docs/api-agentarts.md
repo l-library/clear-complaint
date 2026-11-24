@@ -388,7 +388,30 @@ async def invoke_workflow(
 
 #### 16.3.4 轮次、补充与新问诊边界
 
-五类关键字段是 `onset/duration/location/character/associated_symptoms`。存在未答关键缺项、未整体跳过且已下发轮次不到 5 时，工作流只返回下一轮待问字段。`medication` 缺失时随关键缺项附加到待问字段，单独缺用药不阻断生成；每轮最多 5 问。
+五类关键字段是 `onset/duration/location/character/associated_symptoms`。未整体跳过且已下发轮次不到 5 时，任一未答字段（包含 `medication`）进入下一轮待问字段；每轮最多 5 问。首轮 5 问未容纳的用药问题应在下一轮补问，不能将未给用户回答机会的缺项判成证据不足。明确未知、整体跳过或达到轮次上限后仍可进入检索，不强迫用户编造已知答案。
+
+#### 16.3.4.1 字段状态与时长格式（2026-11-24 修订）
+
+| 字段 | 格式及判定 |
+| --- | --- |
+| `missing_fields` | 去重的 `Array<String>`，使用平台字段名；仅包含 `normalized` 中缺省、`null`、空字符串或空数组的未答项。不能把非空的合法数字时长、区间时长或明确未知放入其中。 |
+| `unknown_fields` | 去重的 `Array<String>`，使用平台字段名；对应用户明确回答 `unknown`、不知道、不清楚、不确定、未知、未提供、不详或跳过的项。与 `missing_fields` 不重叠；不转成“无症状／没用药”等阴性事实，也不重复追问。 |
+| `clarification_request.question_fields` | `missing_fields` 的下一批，按既定字段顺序取最多 5 项；未问到的剩余项仍保留在 `missing_fields`，下一轮继续处理。 |
+| `information_incomplete` | Boolean；五类关键字段中存在缺失或明确未知即为 true。可选用药字段未知不单独改变此标记，但未答用药仍可在轮次内补问。 |
+| `insufficient_evidence` | 只用于完成／跳过澄清后，检索池没有具有真实标题和正文的可用来源；`error_code=NO_RETRIEVAL_EVIDENCE`，`draft=null`，`needs_backend_fallback=true`。不得因为 `medication` 未答、字段明确未知或时长含数字／区间而直接返回该状态。检索结构损坏使用 `failed/INVALID_RETRIEVAL_OUTPUT`。 |
+
+平台字段名限于 `symptom/onset/duration/location/character/associated_symptoms/medication`；主要症状必须已知。上述字段集合不接受对象、逗号拼接字符串或公开字段名 `duration_text` 等混入数组。公开 SSE／详情中的 `missing_fields/unknown_fields` 则反向映射为公开字段名。
+
+`normalized.duration` 使用非空文本，支持中文、数字、数字与单位间空格及区间，例如“两天”“一周”“3天”“1 周”“1–3 天”“4–7 天”“不到 1 天”“1 周以上”。传输适配只做等价规范化：`3天 → 三天`、`1 周 → 一周`、`1–3 天 → 一至三天`；不能取区间上界／下界冒充单点时长，也不能把“不到一天”改成“一天”。自由文本仍保留，原始答案逐字存入问诊记录。格式已接受但本轮检索无来源时，应标记真实的检索原因，不宣称时长不合法。
+
+本次提供的 `backend/tools/patch_triage_workflow.py` 从用户交付的 `workflow_Triage-Workflow-MainFlow_20261124100243.jsonl` 生成修订导出，更新原图内 4 个原生代码节点，保持图结构和原文件不变。修订版本为 `2026-11-24.mainflow-io.4`；Profile Intake 与 Followup Supplement 不变。运行：
+
+```powershell
+cd backend
+uv run python tools/patch_triage_workflow.py INPUT.jsonl ../output/workflow_Triage-Workflow-MainFlow-Duration-Clarification-Fix_20261124.jsonl
+```
+
+修订导出须在 AgentArts 导入并发布后才改变云端工作流。仓库后端同时规范化传输时长，并在平台将未答缺项误报为证据不足时恢复合法的下一轮澄清；它不会把真实检索失败改成无依据的成功结果。发布前回归至少覆盖所有界面时长选项、首轮五问后补问用药、明确未知不重复问、轮次上限、空检索池及重复请求。
 
 后端可直接检查字段并下发固定问题卡，无需每轮都调用平台。已知字段不重复问；`unknown`、不知道、不清楚、不确定、未知、未提供、不详、跳过视为明确未知，不再作为未答问题。关键字段未知仍保留 `information_incomplete=true`。达到第 5 轮或 `skipped=true` 后不再阻断生成，最终证据或草稿不足时由后端兜底。
 
