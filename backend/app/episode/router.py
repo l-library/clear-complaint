@@ -130,26 +130,6 @@ async def episode_detail(
     return ok(schema.EpisodeDetail(**detail))
 
 
-@router.post("/episodes/{episode_id}/save")
-async def save_episode(
-    episode_id: int,
-    payload: schema.SaveEpisodeRequest,
-    session: SessionDep,
-    user: CurrentUser,
-) -> ApiResponse[schema.SaveEpisodeData]:
-    data = await service.save_episode(
-        session,
-        user.id,
-        episode_id,
-        {
-            "save": payload.save,
-            "reminder": payload.reminder,
-            "recheck_date": payload.recheck_date,
-        },
-    )
-    return ok(schema.SaveEpisodeData(**data))
-
-
 @router.delete("/episodes/{episode_id}")
 async def delete_episode(
     episode_id: int, session: SessionDep, user: CurrentUser

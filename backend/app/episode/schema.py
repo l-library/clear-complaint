@@ -18,23 +18,6 @@ class ClarifyRequest(BaseModel):
     answers: list[ClarifyAnswer] = Field(min_length=1, max_length=5)
 
 
-class SaveEpisodeRequest(BaseModel):
-    save: bool = True
-    reminder: bool = True
-    recheck_date: str | None = None
-
-
-class ReminderOut(BaseModel):
-    id: int
-    kind: str
-    due_at: str
-
-
-class SaveEpisodeData(BaseModel):
-    saved_at: str | None
-    reminder: ReminderOut | None
-
-
 class EpisodeSummary(BaseModel):
     id: int
     status: str
