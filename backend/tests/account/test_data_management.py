@@ -82,10 +82,7 @@ def _seed_episode(
         "POST", "/api/episodes", json={"complaint": "流涕三天了"}, headers=headers
     ) as stream:
         stream.read()
-    saved = db_client.post(
-        "/api/episodes/1/save", json={"save": True, "reminder": True}, headers=_auth(data)
-    )
-    assert saved.status_code == 200
+    # 生成完成即自动归档（issue #24），无需再调用保存端点
 
 
 @pytest.fixture

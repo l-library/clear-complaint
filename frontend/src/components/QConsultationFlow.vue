@@ -27,14 +27,7 @@
       <view v-if="workspace.result.conditions.length" class="result-section"><text class="live-label">可能相关情况与依据</text><view v-for="condition in workspace.result.conditions" :key="condition.name" class="condition"><text>{{ condition.name }}</text><view v-for="(evidence, index) in condition.evidence" :key="index" class="evidence"><text class="live-preserve">{{ evidence.quote }}</text><text class="live-muted">{{ evidence.doc_title }} · {{ evidence.section }}</text></view></view></view>
       <view v-for="section in prepSections" :key="section.key" class="result-section"><text class="live-label">{{ section.title }}</text><text v-for="(item, index) in workspace.result.prep[section.key]" :key="index" class="prep-item">{{ item }}</text><text v-if="!workspace.result.prep[section.key].length" class="live-muted">暂无额外准备项</text></view>
       <text class="live-notice">{{ workspace.detail?.disclaimer || '清诉不构成诊断，最终判断以医生为准。' }}</text>
-      <view v-if="workspace.result.triage !== 'emergency'" class="save-settings">
-        <checkbox-group v-if="!workspace.saved" @change="workspace.saveReminder = $event.detail.value.includes('reminder')"><label class="live-check"><checkbox value="reminder" :checked="workspace.saveReminder" /><text>保存问诊时添加提醒</text></label></checkbox-group>
-        <template v-if="workspace.saved || workspace.saveReminder">
-          <view v-if="workspace.result.triage === 'clinic'"><text class="live-label">复查日期（选填）</text><picker mode="date" :start="recheckRange.start" :end="recheckRange.end" :value="workspace.recheckDate" @change="workspace.recheckDate = String($event.detail.value)"><view class="live-select">{{ workspace.recheckDate || '使用默认日期' }}</view></picker><button v-if="workspace.recheckDate" role="button" tabindex="0" @keydown="activateButton" class="live-link" @click="workspace.recheckDate = ''">使用默认日期</button><text class="live-muted">新提醒日期范围：{{ recheckRange.start }} 至 {{ recheckRange.end }}；默认使用范围内第一天。</text></view>
-          <template v-if="workspace.saved"><button role="button" tabindex="0" @keydown="activateButton" class="live-secondary" :disabled="workspace.pending" @click="workspace.saveConversation(true, workspace.recheckDate || undefined)">{{ workspace.result.triage === 'clinic' ? '补建就诊提醒' : '补建随访提醒' }}</button><text class="live-muted">已有待处理提醒会保留原时间。</text></template>
-        </template>
-      </view>
-      <text v-if="workspace.saveNotice" class="live-notice" role="status">{{ workspace.saveNotice }}</text>
+      <text v-if="workspace.result.triage !== 'emergency'" class="live-muted">按建议就诊前会收到提醒；时间可在健康计划里查看和调整。</text>
       <text class="live-muted">继续输入新的不适会开始一份新问诊，当前记录可在历史中回看。</text>
     </view>
     <view v-if="workspace.error && !workspace.pending" class="live-actions"><button role="button" tabindex="0" @keydown="activateButton" class="live-secondary" @click="workspace.retry">重试／恢复问诊</button></view>
@@ -43,15 +36,8 @@
 
 <script setup lang="ts">
 import { activateButton } from '@/components/buttonKeyboard'
-import { computed } from 'vue'
 import { useLiveWorkspaceStore } from '@/stores/liveWorkspace'
 const workspace = useLiveWorkspaceStore()
-const recheckRange = computed(() => {
-  const date = workspace.detail?.episode.created_at.slice(0, 10)
-  const base = Date.parse(`${date}T00:00:00Z`)
-  const day = (offset: number) => Number.isFinite(base) ? new Date(base + offset * 86400000).toISOString().slice(0, 10) : ''
-  return { start: day(3), end: day(14) }
-})
 const followUpQuestions = [
   { field: 'relieved', text: '症状是否缓解？', options: [{ value: 'yes', text: '已缓解' }, { value: 'no', text: '未缓解' }, { value: 'worse', text: '加重' }] },
   { field: 'visited', text: '是否已经就诊？', options: [{ value: 'yes', text: '是' }, { value: 'no', text: '否' }] },
@@ -75,6 +61,5 @@ const prepSections = [{ key: 'bring', title: '就医携带' }, { key: 'describe'
 .evidence { margin: 10px 0; padding: 12px 14px; border-left: 2px solid #d9e5ff; background: #fafbff; font-size: 13px; line-height: 1.9; }
 .evidence .live-muted { margin-top: 7px; }
 .prep-item { display: block; margin-top: 7px; font-size: 14px; }
-.save-settings { margin: 16px 0; }
 @media (max-width: 600px) { .consultation-flow { margin-left: 0; } .consultation-flow .live-card { padding: 18px 16px; } }
 </style>

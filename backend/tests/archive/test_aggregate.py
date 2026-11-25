@@ -94,10 +94,6 @@ def test_overview_collects_everything(
         "POST", "/api/episodes", json={"complaint": "流涕三天了"}, headers=headers
     ) as stream:
         stream.read()
-    save = db_client.post(
-        "/api/episodes/1/save", json={"save": True, "reminder": True}, headers=_auth(user)
-    )
-    assert save.status_code == 200
 
     response = db_client.get("/api/archive/overview", headers=_auth(user))
     data = _body(response)["data"]
@@ -156,9 +152,6 @@ def test_trend_points_and_keywords(
         "POST", "/api/episodes", json={"complaint": "流涕咳嗽三天了"}, headers=headers
     ) as stream:
         stream.read()
-    db_client.post(
-        "/api/episodes/1/save", json={"save": True, "reminder": False}, headers=_auth(user)
-    )
 
     response = db_client.get("/api/archive/trend?days=90&limit=10", headers=_auth(user))
     data = _body(response)["data"]

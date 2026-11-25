@@ -222,6 +222,9 @@ async def create_episode(
         episode.result = compose.red_flag_result()
     session.add(episode)
     await session.commit()
+    if hits:
+        await _archive_with_reminder(session, episode)
+        await session.commit()
     await _register_idempotency(session, user_id, key, fingerprint, episode.id)
     return episode, True
 
@@ -283,6 +286,9 @@ async def submit_clarify(
     else:
         episode.status = STATUS_GENERATING
     await session.commit()
+    if hits:
+        await _archive_with_reminder(session, episode)
+        await session.commit()
     await _register_idempotency(session, user_id, key, fingerprint, episode.id)
     return episode, True
 
@@ -324,6 +330,35 @@ async def retry_episode(
     await session.commit()
     await _register_idempotency(session, user_id, key, fingerprint, episode.id)
     return episode, True
+
+
+async def _archive_with_reminder(session: AsyncSession, episode: Episode) -> None:
+    """生成完成即归档并按档位建提醒（issue #24）。
+
+    引用闸门在落库前已逐字核验，让用户再「核对」是免责仪式；复查提醒挂在
+    手动归档上，没点弹窗的人就静默失去闭环。归档与提醒都改为完成时自动；
+    已有待处理提醒时保持原样（幂等重放不翻倍）。
+    """
+    triage = str((episode.result or {}).get("triage", ""))
+    existing = await session.scalar(
+        select(reminder_models.Reminder).where(
+            reminder_models.Reminder.episode_id == episode.id,
+            reminder_models.Reminder.status == reminder_models.STATUS_PENDING,
+        )
+    )
+    if existing is None:
+        reminder = create_episode_reminder(
+            user_id=episode.user_id,
+            episode_id=episode.id,
+            created_at=episode.created_at,
+            triage=triage,
+            recheck_date=None,
+        )
+        if reminder is not None:
+            session.add(reminder)
+    if episode.status != STATUS_SAVED:
+        episode.status = STATUS_SAVED
+        episode.saved_at = now_shanghai()
 
 
 def _apply_red_flag(episode: Episode, hits: list[redflag.Hit]) -> None:
@@ -465,7 +500,7 @@ async def _pipeline(
     session: AsyncSession, episode: Episode
 ) -> AsyncIterator[tuple[str, dict[str, object]]]:
     """首发生成。红旗短路已在入库时定死（status=ready），这里只走模型路径。"""
-    if episode.status == STATUS_READY:
+    if episode.status in (STATUS_READY, STATUS_SAVED):
         async for event in _broadcast(episode):
             yield event
         return
@@ -707,7 +742,7 @@ async def _apply_draft(
         }
     )
     episode.gate = gate
-    episode.status = STATUS_READY
+    await _archive_with_reminder(session, episode)
     await session.commit()
     async for event in _broadcast_tail(episode):
         yield event
@@ -721,7 +756,7 @@ async def _finalize_fallback(
     gate = dict(episode.gate or {})
     gate.update({"degraded": True, "fallback": True})
     episode.gate = gate
-    episode.status = STATUS_READY
+    await _archive_with_reminder(session, episode)
     await session.commit()
     async for event in _broadcast_tail(episode):
         yield event
@@ -915,59 +950,6 @@ async def episode_detail(session: AsyncSession, user_id: int, episode_id: int) -
     }
 
 
-async def save_episode(
-    session: AsyncSession, user_id: int, episode_id: int, payload: dict[str, object]
-) -> dict[str, object]:
-    episode = await _load_owned(session, user_id, episode_id)
-    if episode.status not in (STATUS_READY, STATUS_SAVED):
-        raise BizException(ErrorCode.EPISODE_STATE_NOT_ALLOWED)
-
-    wants_save = bool(payload.get("save", True))
-    wants_reminder = bool(payload.get("reminder", True))
-    result = episode.result or {}
-    triage = str(result.get("triage", ""))
-
-    # 先做校验与新建，再落保存状态：400 时不能留下半套变更
-    reminder: reminder_models.Reminder | None = None
-    if wants_reminder:
-        reminder = await session.scalar(
-            select(reminder_models.Reminder).where(
-                reminder_models.Reminder.episode_id == episode.id,
-                reminder_models.Reminder.status == reminder_models.STATUS_PENDING,
-            )
-        )
-        if reminder is None:
-            reminder = create_episode_reminder(
-                user_id=user_id,
-                episode_id=episode.id,
-                created_at=episode.created_at,
-                triage=triage,
-                recheck_date=_optional_str(payload.get("recheck_date")),
-            )
-            if reminder is not None:
-                session.add(reminder)
-
-    saved_at = episode.saved_at
-    if wants_save and episode.status != STATUS_SAVED:
-        episode.status = STATUS_SAVED
-        saved_at = now_shanghai()
-        episode.saved_at = saved_at
-    await session.commit()
-
-    return {
-        "saved_at": format_shanghai(saved_at) if saved_at else None,
-        "reminder": (
-            {
-                "id": reminder.id,
-                "kind": reminder.kind,
-                "due_at": format_shanghai(reminder.due_at),
-            }
-            if reminder is not None
-            else None
-        ),
-    }
-
-
 async def delete_episode(session: AsyncSession, user_id: int, episode_id: int) -> None:
     episode = await _load_owned(session, user_id, episode_id)
     await session.delete(episode)
@@ -1055,7 +1037,6 @@ __all__ = [
     "latest_saved_triage",
     "parse_idempotency_key",
     "retry_episode",
-    "save_episode",
     "saved_episode_count",
     "saved_symptom_texts",
     "saved_triage_points",

@@ -6,17 +6,23 @@
 
 import json
 import re
+from collections.abc import Awaitable, Callable
+from functools import partial
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.client import invoke_workflow  # noqa: F401  确保客户端可导入
 from app.common.codes import ErrorCode
 from app.common.errors import BizException
 from app.core.config import get_settings
 from app.episode import platform
+from app.reminder import models as reminder_models
 
 _POOL_CONTENT = "以鼻塞、流涕、喷嚏、咽痛为主要表现，全身症状较轻。"
 
@@ -275,7 +281,7 @@ def test_draft_ready_streams_full_result(
     assert sections["prep"]["bring"]
 
     detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
-    assert detail["episode"]["status"] == "ready"
+    assert detail["episode"]["status"] == "saved"
     assert detail["gate"]["citations_verified"] == 1
     assert detail["profile_snapshot"]["sex"] == "female"
     # normalize 的口语折算：流鼻涕 → 流涕（app/agent/normalize.py 的 COLLOQUIAL_MAP）
@@ -418,7 +424,7 @@ def test_missing_medication_gets_a_second_round(
     assert response.status_code == 200
     assert fake.calls[2]["normalized"]["medication"] == "unknown"
     detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
-    assert detail["episode"]["status"] == "ready"
+    assert detail["episode"]["status"] == "saved"
 
 
 def test_empty_retrieval_insufficient_falls_back_without_asking(
@@ -461,7 +467,7 @@ def test_empty_retrieval_insufficient_falls_back_without_asking(
     # 只调了一次平台：空检索不触发补问轮
     assert len(fake.calls) == 1
     detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
-    assert detail["episode"]["status"] == "ready"
+    assert detail["episode"]["status"] == "saved"
     assert detail["gate"]["retrieval"] == {
         "attempts": 2,
         "retry_used": True,
@@ -625,7 +631,7 @@ def test_retry_after_unexpected_failure(
 
     assert events[-1][0] == "done"
     detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
-    assert detail["episode"]["status"] == "ready"
+    assert detail["episode"]["status"] == "saved"
 
 
 def test_retry_rejects_ready_episode(
@@ -748,72 +754,77 @@ def test_list_filters_and_pages(
 # ---- 保存与提醒 ----
 
 
-def test_save_clinic_creates_recheck(
-    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+async def _episode_reminders(
+    session: AsyncSession, episode_id: int
+) -> list[reminder_models.Reminder]:
+    rows = await session.execute(
+        select(reminder_models.Reminder).where(reminder_models.Reminder.episode_id == episode_id)
+    )
+    return list(rows.scalars())
+
+
+def test_clinic_generation_auto_archives_and_creates_recheck(
+    db_client: TestClient,
+    user: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    run_db: Callable[[Callable[[AsyncSession], Awaitable[Any]]], Any],
 ) -> None:
     fake = Platform([_draft_ready(triage="clinic", department="呼吸内科")])
     monkeypatch.setattr(platform, "call_triage", fake)
     _post_episode(db_client, user)
 
-    response = db_client.post(
-        "/api/episodes/1/save", json={"save": True, "reminder": True}, headers=_auth(user)
-    )
-    data = _body(response)["data"]
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
 
-    assert data["saved_at"]
-    assert data["reminder"]["kind"] == "recheck"
-    assert data["reminder"]["due_at"].endswith("09:00:00")
+    # 生成完成即归档，不依赖任何手动确认（issue #24）
+    assert detail["episode"]["status"] == "saved"
+    assert detail["episode"]["saved_at"]
 
-    again = db_client.post(
-        "/api/episodes/1/save", json={"save": True, "reminder": True}, headers=_auth(user)
-    )
-    assert _body(again)["data"]["saved_at"] == data["saved_at"]
+    reminders = run_db(partial(_episode_reminders, episode_id=1))
+    assert len(reminders) == 1
+    assert reminders[0].kind == "recheck"
+    assert reminders[0].status == "pending"
+    # 默认复查提醒：episode.created_at + 3 天的 09:00 上海时间（策略在后端，前端不再挑日期）
+    assert reminders[0].due_at.astimezone(ZoneInfo("Asia/Shanghai")).hour == 9
+
+    # 同一幂等键重放不重复归档、不翻倍提醒
+    _post_episode(db_client, user)
+    reminders_again = run_db(partial(_episode_reminders, episode_id=1))
+    assert len(reminders_again) == 1
 
 
-def test_save_self_observe_creates_followup(
-    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+def test_self_observe_generation_creates_followup(
+    db_client: TestClient,
+    user: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    run_db: Callable[[Callable[[AsyncSession], Awaitable[Any]]], Any],
 ) -> None:
     fake = Platform([_draft_ready(triage="self_observe", department="全科医学科")])
     monkeypatch.setattr(platform, "call_triage", fake)
     _post_episode(db_client, user)
 
-    response = db_client.post(
-        "/api/episodes/1/save", json={"save": True, "reminder": True}, headers=_auth(user)
-    )
-    data = _body(response)["data"]
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["episode"]["status"] == "saved"
 
-    assert data["reminder"]["kind"] == "followup"
+    reminders = run_db(partial(_episode_reminders, episode_id=1))
+    assert len(reminders) == 1
+    assert reminders[0].kind == "followup"
 
 
-def test_save_emergency_has_no_reminder(
-    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+def test_emergency_generation_archives_without_reminder(
+    db_client: TestClient,
+    user: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    run_db: Callable[[Callable[[AsyncSession], Awaitable[Any]]], Any],
 ) -> None:
     fake = Platform([_draft_ready(triage="emergency", department="急诊科")])
     monkeypatch.setattr(platform, "call_triage", fake)
     _post_episode(db_client, user)
 
-    response = db_client.post(
-        "/api/episodes/1/save", json={"save": True, "reminder": True}, headers=_auth(user)
-    )
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
 
-    assert _body(response)["data"]["reminder"] is None
-
-
-def test_save_rejects_out_of_range_recheck_date(
-    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fake = Platform([_draft_ready(triage="clinic", department="呼吸内科")])
-    monkeypatch.setattr(platform, "call_triage", fake)
-    _post_episode(db_client, user)
-
-    response = db_client.post(
-        "/api/episodes/1/save",
-        json={"save": True, "reminder": True, "recheck_date": "2030-01-01"},
-        headers=_auth(user),
-    )
-
-    assert response.status_code == 400
-    assert "recheck_date" in _body(response)["message"]
+    # 急诊档照常归档，但不建提醒：去急诊不需要应用提醒
+    assert detail["episode"]["status"] == "saved"
+    assert run_db(partial(_episode_reminders, episode_id=1)) == []
 
 
 def test_delete_removes_episode(

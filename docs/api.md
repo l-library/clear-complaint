@@ -468,7 +468,7 @@
 
 响应为分页结构，`records` 为 `EpisodeSummary` 数组，按 `created_at` 倒序。
 
-用途：档案历史列表传 `status=saved`；问诊 tab 的"继续上次"传 `status=clarifying,generating,ready&size=3`。
+用途：档案历史列表传 `status=saved`；问诊 tab 的"继续上次"传 `status=clarifying,generating&size=3`（完成即归档，`ready` 不再是持久状态）。
 
 ### 5.6 `GET /api/episodes/{id}` 问诊详情
 
@@ -478,32 +478,17 @@
 
 `degraded` 与 `gate.fallback` 的含义：`degraded=true` 表示走了兜底模板（平台不可用、超时、草稿不合规），`gate.fallback=true` 是它在闸门摘要里的同义标记；引用全部核验失败只让 `conditions` 为空，不算降级。
 
-### 5.7 `POST /api/episodes/{id}/save` 保存并创建提醒
+### 5.7 归档与提醒：生成完成即自动
 
-请求：
+原 `POST /api/episodes/{id}/save` 端点已移除。问诊生成完成（含红旗短路与兜底模板）即自动归档并按档位创建提醒，不再依赖任何手动确认；引用闸门在落库前已逐字核验，让用户再「核对」一遍只是免责仪式，而提醒挂在手动归档上会让没点确认的人静默失去复查闭环。
 
-```json
-{ "save": true, "reminder": true, "recheck_date": "2026-12-03" }
-```
-
-| 字段 | 规则 |
+| 档位 | 自动动作 |
 | --- | --- |
-| `save` | 为 `false` 时只结束本次问诊，不写入档案 |
-| `reminder` | 为 `true` 时按档位创建提醒：`self_observe` 建随访，`clinic` 建复查，`emergency` 忽略该字段 |
-| `recheck_date` | 仅 `clinic` 有效，范围 `created_at` + 3 至 14 天，缺省为 +3 天 |
+| `self_observe` | 建随访提醒，`created_at` + 48 小时 |
+| `clinic` | 建复查提醒，`created_at` + 3 天的 09:00（策略在后端，前端不再选日期） |
+| `emergency` | 只归档，不建提醒 |
 
-响应：
-
-```json
-{
-  "saved_at": "2026-11-30 21:15:10",
-  "reminder": { "id": 77, "kind": "recheck", "due_at": "2026-12-03 09:00:00" }
-}
-```
-
-`save=false` 时 `saved_at` 为 `null`；不创建提醒时 `reminder` 为 `null`。重复调用幂等，返回已有结果。
-
-错误：2005 状态不是 `ready` 或 `saved`；`recheck_date` 超出 3–14 天范围时按参数错误处理，返回 400 + 400。
+归档即 `status=saved` 且 `saved_at` 置位；幂等重放不重复归档、不翻倍提醒，已有待处理提醒保持原样。未走完的问诊（`generating`/`clarifying`/`failed`）不归档，到期由清理任务物理删除。
 
 ### 5.8 `DELETE /api/episodes/{id}`
 

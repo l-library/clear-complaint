@@ -2,11 +2,12 @@
 
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -87,13 +88,15 @@ def _create_episode(
         stream.read()
 
 
-def _save_episode(db_client: TestClient, data: dict[str, Any], reminder: bool) -> dict[str, Any]:
-    response = db_client.post(
-        "/api/episodes/1/save", json={"save": True, "reminder": reminder}, headers=_auth(data)
-    )
-    assert response.status_code == 200, response.text
-    saved: dict[str, Any] = _body(response)["data"]
-    return saved
+def _episode_reminder_id(run_db: RunDb) -> int:
+    """生成完成即自动建提醒（issue #24）：直接查库取第一条 episode 提醒。"""
+
+    async def query(session: AsyncSession) -> int:
+        row: int | None = await session.scalar(select(reminder_models.Reminder.id).limit(1))
+        assert row is not None
+        return row
+
+    return cast(int, run_db(query))
 
 
 def _medication_reminder_row(user_id: int, due_at: datetime) -> reminder_models.Reminder:
@@ -202,8 +205,7 @@ def test_recheck_actions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _create_episode(db_client, user, monkeypatch, "clinic")
-    saved = _save_episode(db_client, user, True)
-    reminder_id = saved["reminder"]["id"]
+    reminder_id = _episode_reminder_id(run_db)
 
     planned = db_client.post(
         f"/api/reminders/{reminder_id}/respond", json={"action": "planned"}, headers=_auth(user)
@@ -277,7 +279,6 @@ def test_followup_rules(
     level: str,
 ) -> None:
     _create_episode(db_client, user, monkeypatch, "self_observe")
-    _save_episode(db_client, user, True)
     reminder_id = _insert(run_db, _followup_reminder(1, 1))
 
     async def no_supplement(request: dict[str, Any], session_id: str) -> dict[str, Any]:
@@ -303,7 +304,6 @@ def test_followup_clinic_with_valid_supplement(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _create_episode(db_client, user, monkeypatch, "self_observe")
-    _save_episode(db_client, user, True)
     reminder_id = _insert(run_db, _followup_reminder(1, 1))
 
     async def fake_call(request: dict[str, Any], session_id: str) -> dict[str, Any]:
@@ -346,7 +346,6 @@ def test_followup_supplement_invalid_degrades(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _create_episode(db_client, user, monkeypatch, "self_observe")
-    _save_episode(db_client, user, True)
     reminder_id = _insert(run_db, _followup_reminder(1, 1))
 
     async def fake_call(request: dict[str, Any], session_id: str) -> dict[str, Any]:
@@ -383,7 +382,6 @@ def test_followup_rejects_bad_answers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _create_episode(db_client, user, monkeypatch, "self_observe")
-    _save_episode(db_client, user, True)
     reminder_id = _insert(run_db, _followup_reminder(1, 1))
 
     response = db_client.post(
