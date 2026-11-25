@@ -9,7 +9,7 @@
 
 ## 本次交接变更（2026-11-24）
 
-- **只替换 Triage 修订导出**，目标 `workflow_version=2026-11-24.mainflow-io.4`；Profile 与 Followup 保持原版。保留本次附件新增的 Daily 协议，Daily 不属于这次 Triage 修复，也尚未接入本地业务层。
+- **Triage 修订已由平台发布为 `2026-11-24.mainflow-io.5`，Profile 与 Followup 同批升至 `.2`，Daily 升至 `.2`**（均经发布 URL 实测，见 16.1 与 16.3.4.1）；本地导出补丁工具 `tools/patch_triage_workflow.py` 已退役删除。Daily 协议保留，尚未接入本地业务层。
 - Triage 保留原运行时 URL。截图显示控制台“已提交／保存于 2026-11-24 10:47:51”，但未显示最终 `workflow_version`，不能仅凭截图认定发布接口已运行修订版；按下方版本表核对实际终态。
 - 补齐数字／区间时长、第二轮补问用药以及 `missing_fields / unknown_fields / insufficient_evidence` 的判定约定，详见 16.3.4.1。
 - 截图中的 `query: 你好` 是平台通用示例。本项目统一传 `inputs.request_json` 字符串；调试框粘贴内层业务 JSON，不额外加引号。会话 ID 由后端生成，不能复用截图常量。
@@ -24,10 +24,10 @@
 
 | 工作流 | 请求 schema_version | 响应 schema_version | 本地交付 workflow_version |
 | --- | --- | --- | --- |
-| Triage-Workflow-MainFlow | `clear-complaint.triage.request.v1` | `clear-complaint.triage.workflow.v1` | `2026-11-24.mainflow-io.4` |
-| Profile-Intake-Workflow | `clear-complaint.profile-intake.request.v1` | `clear-complaint.profile-intake.workflow.v1` | `2026-11-21.profile-intake.1` |
-| Followup-Supplement-Workflow | `clear-complaint.followup-supplement.request.v1` | `clear-complaint.followup-supplement.workflow.v1` | `2026-11-21.followup-supplement.1` |
-| Daily-Health-Companion-Workflow | `clear-complaint.daily-companion.request.v1` | `clear-complaint.daily-companion.workflow.v1` | `2026-11-24.daily-companion.1` |
+| Triage-Workflow-MainFlow | `clear-complaint.triage.request.v1` | `clear-complaint.triage.workflow.v1` | `2026-11-24.mainflow-io.5` |
+| Profile-Intake-Workflow | `clear-complaint.profile-intake.request.v1` | `clear-complaint.profile-intake.workflow.v1` | `2026-11-24.profile-intake.2` |
+| Followup-Supplement-Workflow | `clear-complaint.followup-supplement.request.v1` | `clear-complaint.followup-supplement.workflow.v1` | `2026-11-24.followup-supplement.2` |
+| Daily-Health-Companion-Workflow | `clear-complaint.daily-companion.request.v1` | `clear-complaint.daily-companion.workflow.v1` | `2026-11-24.daily-companion.2` |
 
 本地后端已有原三条工作流的客户端和相关业务接入；本文新增Daily尚需扩展配置/客户端映射和日报业务层。本次只修改交接文件，不新增后端路由或持久化实现。示例全部为合成数据。
 
@@ -352,6 +352,8 @@ async def invoke_workflow(
 
 工作流返回完整的内部结果 JSON 文本。其 `status` 与公开 `episode.status` 不是同一个枚举，平台完成事件也不等于业务生成成功。后端应读取并校验 `schema_version/workflow_version/episode_id/request_id/status`，再处理结果。
 
+校验失败（缺 `schema_version`、未知顶层字段等）时，最早失败出口会摘取并回显合法的 `request_id`（Triage/Profile/Followup 状态 `failed`，Daily 状态 `invalid_input`，错误码均为 `INVALID_REQUEST`）。此前该场景回显空串、后端按「请求关联不匹配」处理并吞掉真实原因；io.5／.2 起后端可直接把 `INVALID_REQUEST` 透传到日志。畸形 JSON、Daily 重复键导致的歧义、缺失或超长 ID 仍允许回显空 `request_id`，后端的关联校验须继续保留空值分支。
+
 | 内部字段 | 后端处理／公开字段 |
 | --- | --- |
 | `draft.triage` | 仅 `emergency/clinic/self_observe`；最终规则和闸门确认后写入 `Result.triage`，不直接透传 |
@@ -415,20 +417,24 @@ async def invoke_workflow(
 | `unknown_fields` | 去重的 `Array<String>`，使用平台字段名；对应用户明确回答 `unknown`、不知道、不清楚、不确定、未知、未提供、不详或跳过的项。与 `missing_fields` 不重叠；不转成“无症状／没用药”等阴性事实，也不重复追问。 |
 | `clarification_request.question_fields` | `missing_fields` 的下一批，按既定字段顺序取最多 5 项；未问到的剩余项仍保留在 `missing_fields`，下一轮继续处理。 |
 | `information_incomplete` | Boolean；五类关键字段中存在缺失或明确未知即为 true。可选用药字段未知不单独改变此标记，但未答用药仍可在轮次内补问。 |
-| `insufficient_evidence` | 只用于完成／跳过澄清后，检索池没有具有真实标题和正文的可用来源；`error_code=NO_RETRIEVAL_EVIDENCE`，`draft=null`，`needs_backend_fallback=true`。不得因为 `medication` 未答、字段明确未知或时长含数字／区间而直接返回该状态。检索结构损坏使用 `failed/INVALID_RETRIEVAL_OUTPUT`。 |
+| `insufficient_evidence` | 只用于检索无可用来源：首次为空时以相同查询、知识库和阈值再检索一次，两次皆空才返回；`error_code=NO_RETRIEVAL_EVIDENCE`，`draft=null`，`needs_backend_fallback=true`，此时 `missing_fields`/`unknown_fields` 必为空数组、`field_status_evaluated=false`——缺项判定推迟到检索成功之后，空缺项数组不能解释为信息完整。不得因为 `medication` 未答、字段明确未知或时长含数字／区间而直接返回该状态。检索结构损坏使用 `failed/INVALID_RETRIEVAL_OUTPUT`。 |
 
 平台字段名限于 `symptom/onset/duration/location/character/associated_symptoms/medication`；主要症状必须已知。上述字段集合不接受对象、逗号拼接字符串或公开字段名 `duration_text` 等混入数组。公开 SSE／详情中的 `missing_fields/unknown_fields` 则反向映射为公开字段名。
 
 `normalized.duration` 使用非空文本，支持中文、数字、数字与单位间空格及区间，例如“两天”“一周”“3天”“1 周”“1–3 天”“4–7 天”“不到 1 天”“1 周以上”。传输适配只做等价规范化：`3天 → 三天`、`1 周 → 一周`、`1–3 天 → 一至三天`；不能取区间上界／下界冒充单点时长，也不能把“不到一天”改成“一天”。自由文本仍保留，原始答案逐字存入问诊记录。格式已接受但本轮检索无来源时，应标记真实的检索原因，不宣称时长不合法。
 
-本次提供的 `backend/tools/patch_triage_workflow.py` 从用户交付的 `workflow_Triage-Workflow-MainFlow_20261124100243.jsonl` 生成修订导出，更新原图内 4 个原生代码节点，保持图结构和原文件不变。修订版本为 `2026-11-24.mainflow-io.4`；Profile Intake 与 Followup Supplement 不变。运行：
+上述修订已由平台发布为 `2026-11-24.mainflow-io.5` 并经发布 URL 实测（数字区间时长、空检索重试、校验失败回显）。曾经的本地导出补丁工具 `tools/patch_triage_workflow.py` 已删除：它只为生成 io.4 修订导出而生，同一时长规范化逻辑不再需要后端与平台两边维护。
 
-```powershell
-cd backend
-uv run python tools/patch_triage_workflow.py INPUT.jsonl ../output/workflow_Triage-Workflow-MainFlow-Duration-Clarification-Fix_20261124.jsonl
-```
+仓库后端继续规范化传输时长；io.5 起补问只由 `needs_clarification` 驱动，`insufficient_evidence` 一律按空检索兜底、不再解释为「用户没答完」。空检索的兜底原因经 `retrieval` 诊断字段记入后端日志与问诊详情的 `gate.retrieval`：
 
-修订导出须在 AgentArts 导入并发布后才改变云端工作流。仓库后端同时规范化传输时长，并在平台将未答缺项误报为证据不足时恢复合法的下一轮澄清；它不会把真实检索失败改成无依据的成功结果。发布前回归至少覆盖所有界面时长选项、首轮五问后补问用药、明确未知不重复问、轮次上限、空检索池及重复请求。
+| 字段 | 取值 |
+| --- | --- |
+| `retrieval.attempts` | 1 或 2 |
+| `retrieval.retry_used` | Boolean |
+| `retrieval.status` | `usable` / `empty` / `invalid` |
+| `retrieval.field_status_evaluated` | Boolean；`false` 时空缺项数组不构成信息完整 |
+
+输入错误或红旗在检索前结束时 `retrieval=null`。它只供后端排查，不是患者文案或评分；重试后模型、引用校验与 `output_list` 使用选中那次检索的证据池及原下标。
 
 后端可直接检查字段并下发固定问题卡，无需每轮都调用平台。已知字段不重复问；`unknown`、不知道、不清楚、不确定、未知、未提供、不详、跳过视为明确未知，不再作为未答问题。关键字段未知仍保留 `information_incomplete=true`。达到第 5 轮或 `skipped=true` 后不再阻断生成，最终证据或草稿不足时由后端兜底。
 
@@ -1012,6 +1018,8 @@ AGENTARTS_DAILY_COMPANION_URL=https://defaultgw-mqytamjqmn.cn-southwest-2.huawei
 #### 16.8.2 业务请求字段
 
 后端把下表对象序列化成字符串，放入 `inputs.request_json`。不能只发送截图里的 `query: 你好`，也不能将内层对象直接作为整份HTTP Body。
+
+顶层字段白名单（`daily-companion.2` 起强校验）：只接受 `schema_version, request_id, report_date, timezone, data_source, watch_data, health_archive, baseline, safety_context` 九项；额外的顶层键（含曾经的 `user_memory` 调试字段）返回 `invalid_input / INVALID_REQUEST`。
 
 | 字段 | 必填 | 类型与约定 |
 | --- | --- | --- |
