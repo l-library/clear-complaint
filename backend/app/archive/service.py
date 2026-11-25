@@ -241,6 +241,25 @@ async def create_medication(
     return _medication_out(medication)
 
 
+async def active_medications_brief(
+    session: AsyncSession, user_id: int, limit: int
+) -> list[dict[str, object]]:
+    """triage v2 的 history_context 用药简表：只回 id/name/status（api-agentarts 16.3-v2）。"""
+    rows = (
+        (
+            await session.execute(
+                select(Medication)
+                .where(Medication.user_id == user_id, Medication.status == "active")
+                .order_by(Medication.started_on.desc())
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [{"id": row.id, "name": row.name, "status": row.status} for row in rows]
+
+
 async def list_medications(
     session: AsyncSession, user_id: int, kind: str | None, status: str | None
 ) -> dict[str, object]:
