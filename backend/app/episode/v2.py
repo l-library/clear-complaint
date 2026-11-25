@@ -180,3 +180,99 @@ def build_v2_request(
         },
         "base_revision": base_revision,
     }
+
+
+# ---- 结果修订与提问台账（issue #23 契约第 1、3、5 节） ----
+# 旧结果只保留最近三版：修订是低频对象，回看用，不建独立表
+RESULT_HISTORY_CAP = 3
+
+
+def append_answer(
+    episode: Episode, question_id: str | None, action: str, text: str
+) -> dict[str, Any]:
+    """把一条回答原文记入台账，answer_id 按 episode 内序号生成、稳定可回查。
+
+    台账只增不改：更正以新条目表达，工作流合并时自行取舍。
+    """
+    ledger: list[dict[str, Any]] = list(episode.raw_answers or [])
+    entry: dict[str, Any] = {
+        "answer_id": f"a{len(ledger) + 1}",
+        "question_id": question_id,
+        "action": action,
+        "text": text,
+    }
+    ledger.append(entry)
+    validate_answers(ledger)
+    episode.raw_answers = ledger
+    return entry
+
+
+def new_question_id(episode: Episode) -> str:
+    state = episode.clarify_state or {}
+    questions = state.get("questions")
+    return f"q{len(questions) + 1}" if isinstance(questions, dict) else "q1"
+
+
+def register_question(
+    episode: Episode, question_id: str, purpose: str, text: str, can_skip: bool
+) -> bool:
+    """记录一次下发的问题；重复收到同一 question_id 不重复计数（契约第 3 节）。
+
+    计数按唯一问题，unknown/skip 计入，网络重试由这里的幂等性兜住。
+    """
+    if purpose not in QUESTION_PURPOSES:
+        raise BizException(ErrorCode.INVALID_PARAM, "question.purpose 取值不合法")
+    state: dict[str, Any] = dict(episode.clarify_state or {})
+    raw_questions = state.get("questions")
+    questions: dict[str, Any] = dict(raw_questions) if isinstance(raw_questions, dict) else {}
+    if question_id in questions:
+        return False
+    questions[question_id] = {"purpose": purpose, "text": text, "can_skip": can_skip}
+    state["questions"] = questions
+    state["asked_count"] = int(state.get("asked_count") or 0) + 1
+    episode.clarify_state = state
+    return True
+
+
+def asked_count(episode: Episode) -> int:
+    state = episode.clarify_state or {}
+    raw = state.get("asked_count")
+    return int(raw) if isinstance(raw, int) and not isinstance(raw, bool) else 0
+
+
+def ask_limit_for(episode: Episode) -> int:
+    """当前所处周期的问题上限：初始 10，结果后补充每修订周期 5（契约第 5 节）。"""
+    return ASK_LIMIT_INITIAL if episode.result is None else ASK_LIMIT_REVISION
+
+
+def supersede_result(episode: Episode, new_result: dict[str, Any], new_gate: dict[str, Any]) -> int:
+    """接受一版新结果：旧版本进回看历史（cap 3），修订号推进。
+
+    首版结果 revision 保持 0；此后每接受一版 +1。归档时间与提醒不随修订
+    重置（#28 语义），由调用方保证，这里只管结果版本。
+    """
+    if episode.result is not None:
+        history: list[dict[str, Any]] = list(episode.result_history or [])
+        history.append(
+            {
+                "revision": int(episode.revision or 0),
+                "result": episode.result,
+                "gate": episode.gate,
+                "saved_at": format_shanghai(episode.saved_at) if episode.saved_at else None,
+            }
+        )
+        episode.result_history = history[-RESULT_HISTORY_CAP:]
+        episode.revision = int(episode.revision or 0) + 1
+    episode.result = new_result
+    episode.gate = new_gate
+    return int(episode.revision or 0)
+
+
+def is_stale_revision(episode: Episode, base_revision: int) -> bool:
+    """迟到结果判定：工作流回显的 base_revision 低于当前修订号即拒收（契约第 1 节）。"""
+    return int(base_revision) < int(episode.revision or 0)
+
+
+def store_understanding(episode: Episode, blob: dict[str, Any] | None) -> None:
+    """落库工作流回传的 understanding：校验后原样保存，下一轮原样回传。"""
+    episode.understanding = validate_understanding(blob)

@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.clock import now_shanghai
 from app.common.errors import BizException
 from app.episode import models as episode_models
 from app.episode import v2
@@ -251,3 +252,89 @@ def test_active_medications_brief_shape_and_limit(
     # 只回 id/name/status 三项，且全部是 active
     assert set(rows[0]) == {"id", "name", "status"}
     assert all(row["status"] == "active" for row in rows)
+
+
+def _blank_episode() -> episode_models.Episode:
+    return episode_models.Episode(
+        user_id=1, status="generating", complaint_text="我发烧了", expires_at=now_shanghai()
+    )
+
+
+def test_answer_ledger_ids_and_validation() -> None:
+    episode = _blank_episode()
+    first = v2.append_answer(episode, "q1", "answer", "昨天开始")
+    second = v2.append_answer(episode, None, "answer", "补一句：大概38度")
+    third = v2.append_answer(episode, "q2", "unknown", "")
+
+    assert [first["answer_id"], second["answer_id"], third["answer_id"]] == ["a1", "a2", "a3"]
+    assert second["question_id"] is None
+    assert episode.raw_answers == [first, second, third]
+
+    _raises_invalid(lambda: v2.append_answer(episode, "q1", "maybe", "…"))
+    _raises_invalid(lambda: v2.append_answer(episode, "q1", "answer", "x" * 501))
+
+
+def test_question_registry_counts_unique_only() -> None:
+    episode = _blank_episode()
+    assert v2.new_question_id(episode) == "q1"
+    assert v2.register_question(episode, "q1", "onset", "什么时候开始的？", True)
+    assert v2.asked_count(episode) == 1
+    # 重复下发同一问题：不重复展示、不重复计数
+    assert not v2.register_question(episode, "q1", "onset", "什么时候开始的？", True)
+    assert v2.asked_count(episode) == 1
+
+    assert v2.new_question_id(episode) == "q2"
+    assert v2.register_question(episode, "q2", "other", "你说的A和B是同一个部位吗？", True)
+    assert v2.asked_count(episode) == 2
+    _raises_invalid(lambda: v2.register_question(episode, "q3", "vibes", "不合法的提问目的", True))
+
+
+def test_ask_limit_switches_by_period() -> None:
+    episode = _blank_episode()
+    assert v2.ask_limit_for(episode) == v2.ASK_LIMIT_INITIAL
+    v2.supersede_result(episode, {"triage": "clinic"}, {"degraded": False})
+    assert v2.ask_limit_for(episode) == v2.ASK_LIMIT_REVISION
+
+
+def test_result_supersede_history_cap_and_revisions() -> None:
+    episode = _blank_episode()
+    first = v2.supersede_result(episode, {"triage": "clinic", "mark": 0}, {"degraded": False})
+    assert first == 0 and not episode.result_history
+
+    second = v2.supersede_result(episode, {"triage": "clinic", "mark": 1}, {"degraded": False})
+    assert second == 1
+    assert episode.result_history == [
+        {
+            "revision": 0,
+            "result": {"triage": "clinic", "mark": 0},
+            "gate": {"degraded": False},
+            "saved_at": None,
+        }
+    ]
+
+    for mark in range(2, 6):
+        v2.supersede_result(episode, {"triage": "clinic", "mark": mark}, {"degraded": False})
+    # 只保留最近三版，最旧的被挤掉
+    assert len(episode.result_history) == v2.RESULT_HISTORY_CAP
+    assert [item["revision"] for item in episode.result_history] == [2, 3, 4]
+    assert episode.revision == 5
+    assert episode.result == {"triage": "clinic", "mark": 5}
+
+
+def test_stale_revision_rejects_late_results() -> None:
+    episode = _blank_episode()
+    v2.supersede_result(episode, {"triage": "clinic"}, {})
+    v2.supersede_result(episode, {"triage": "clinic"}, {})
+    assert episode.revision == 1
+    assert not v2.is_stale_revision(episode, 1)
+    # 基于 0 版的迟到结果：当前已是 1 版，拒收
+    assert v2.is_stale_revision(episode, 0)
+
+
+def test_store_understanding_roundtrip_guard() -> None:
+    episode = _blank_episode()
+    v2.store_understanding(episode, {"facts": {"onset": "昨天"}})
+    assert episode.understanding == {"facts": {"onset": "昨天"}}
+    v2.store_understanding(episode, None)
+    assert episode.understanding is None
+    _raises_invalid(lambda: v2.store_understanding(episode, ["not-an-object"]))

@@ -13,6 +13,7 @@ from sqlalchemy import (
     ForeignKey,
     Identity,
     Index,
+    Integer,
     String,
     func,
 )
@@ -54,6 +55,15 @@ class Episode(Base):
     # 追问轮次状态：{round, round_limit, skipped, question_fields, missing_fields, questions}
     clarify_state: Mapped[dict[str, object] | None] = mapped_column(JSONB, default=None)
     saved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # ---- triage request.v2（issue #23）：结果修订与理解状态 ----
+    # 结果修订号：首次结果为 0，结果后补充每接受一版 +1；迟到结果按 base_revision 拒收
+    revision: Mapped[int] = mapped_column(Integer, server_default="0", default=0)
+    # 被新版本取代的旧结果，只留最近 RESULT_HISTORY_CAP 版供回看
+    result_history: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB, default=None)
+    # 工作流 understanding 状态：不透明回传对象，后端只校验体积，不解释
+    understanding: Mapped[dict[str, object] | None] = mapped_column(JSONB, default=None)
+    # v2 回答台账：[{answer_id, question_id, action, text}]，原文累计不改写
+    raw_answers: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB, default=None)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
