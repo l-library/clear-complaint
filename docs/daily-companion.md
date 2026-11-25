@@ -40,7 +40,9 @@
 | `watch_data.date` 与 `report_date` 不一致 | `invalid_input` / `INVALID_REQUEST`，回显正常 |
 
 每次调用 HTTP 200、SSE 终态 `succeeded`，`workflow_version` 均为
-`2026-11-24.daily-companion.1`。
+`2026-11-24.daily-companion.1`（2026-11-24 平台升至 `.2` 后复测通过：顶层九字段
+白名单强校验、多出的 `user_memory` 等键返回 `invalid_input / INVALID_REQUEST`
+并正常回显 `request_id`，验收用例行为不变）。
 
 平台侧已知毛病（与本仓库无关，已列入给平台协作者的清单）：schema 校验
 失败时 request_id 回显为空串，客户端按「请求关联不匹配」处理会吞掉真实

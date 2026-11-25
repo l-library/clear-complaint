@@ -499,11 +499,13 @@ async def _pipeline(
 
     status = str(result.get("status", ""))
     state = episode.clarify_state or {}
+    # io.5 起，insufficient_evidence 恒为空检索（missing_fields 必空、字段完整性
+    # 未评估），它不再携带可补问的缺项；只有 needs_clarification 表示还有字段可问
     pending = clarification.pending_fields(result, episode.normalized or {})
     can_clarify = (
         not state.get("skipped") and _int_or(state.get("round"), 0) < compose.CLARIFY_ROUND_LIMIT
     )
-    if pending and can_clarify and status in ("needs_clarification", "insufficient_evidence"):
+    if pending and can_clarify and status == "needs_clarification":
         async for event in _apply_clarification(session, episode, result):
             yield event
         return
@@ -512,8 +514,19 @@ async def _pipeline(
         async for event in _apply_draft(session, episode, result):
             yield event
         return
-    # failed / insufficient_evidence / 其它：保守兜底，不重试不追问
-    logger.warning("平台未给出可用草稿 episode_id=%s status=%s", episode.id, status)
+    # failed / insufficient_evidence / 其它：保守兜底，不重试不追问。
+    # retrieval 诊断（平台 16.3.4.x）只供排查：兜底原因记进日志与 gate
+    retrieval = result.get("retrieval") if isinstance(result.get("retrieval"), dict) else None
+    logger.warning(
+        "平台未给出可用草稿 episode_id=%s status=%s retrieval=%s",
+        episode.id,
+        status,
+        json.dumps(retrieval, ensure_ascii=False) if retrieval else None,
+    )
+    gate = dict(episode.gate or {})
+    if retrieval:
+        gate["retrieval"] = retrieval
+        episode.gate = gate
     yield _stage(episode, "compose", 95, compose.STAGE_TEXTS["degraded"])
     async for event in _finalize_fallback(session, episode):
         yield event
@@ -813,6 +826,8 @@ def _gate_public(gate: dict[str, object]) -> dict[str, object]:
         "clarify_rounds": gate.get("clarify_rounds", 0),
         "degraded": gate.get("degraded", False),
         "fallback": gate.get("fallback", False),
+        # 平台 16.3.4.x 的检索诊断：只在兜底出现，值原样透传，供排查兜底原因
+        "retrieval": gate.get("retrieval"),
     }
 
 

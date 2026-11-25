@@ -201,7 +201,7 @@ Closes #34.
 | 事项 | 现状 | 备注 |
 | --- | --- | --- |
 | 账号四表（V1、V2）、问诊四表（V3：`episode`/`episode_answer`/`idempotency_key`/`reminder`）、档案三表（V4：`vital`/`medication`/`medication_plan`） | 已建 | 表随域逐个补迁移，字段设计依 docs/api.md |
-| AgentArts 客户端 | 已接入 | `app/agent/client.py` 传输层 + `app/episode/platform.py`、`app/reminder/platform.py` 打桩点；问诊生成、澄清、兜底（M4）与随访第二层（M6c）均已接真流。Triage 现为 `2026-11-24.mainflow-io.4`，已发布并经发布 URL 实测（时长区间可解析、缺用药改为补问而非兜底）；Profile 与 Followup 保持原版。`tools/patch_triage_workflow.py` 从 `clarification.py` 再生成 triage 导出。受限问答与约束详情端点未做 |
+| AgentArts 客户端 | 已接入 | `app/agent/client.py` 传输层 + `app/episode/platform.py`、`app/reminder/platform.py` 打桩点；问诊生成、澄清、兜底（M4）与随访第二层（M6c）均已接真流。Triage 现为 `2026-11-24.mainflow-io.5`，Profile 与 Followup 升至 `.2`，均已发布并经发布 URL 实测（时长区间可解析、缺用药改为补问、空检索重试一次、校验失败回显 request_id）。io.5 起 `insufficient_evidence` 恒为空检索且无待问缺项，后端只在 `needs_clarification` 时补问，并把平台 `retrieval` 诊断记入 `gate.retrieval`；导出补丁工具已退役删除。受限问答与约束详情端点未做 |
 | 每日健康关怀（Daily-Health-Companion 工作流） | 规划中 | 契约见私有交接文档 16.8；发布 URL 已于 2026-11-24 实测通过（四个验收用例加两个负向）。计划在 docs/daily-companion.md：D0 只做登记，D1–D3 为后端（Settings、client 映射、`app/daily` 领域包、`daily_report` 迁移），D4 为前端展示页，D5 推迟真实设备适配、定时生成与推送。密钥已在交接截图中明文出现，正式启用前先轮换 |
 | 归一化、红旗短路、引用核验、受控词表与科室表 | 已写（M5） | `app/agent/normalize.py、redflag.py、citation.py、vocab.py、departments.py` + `data/` 三张冻结表（版本 1），复制自 experiment 并独立维护；测试断言取自 handoff/constraints.md。已知边界：否定 6 字窗口会盖住紧随其后的第二个真命中 |
 | 登录鉴权 | 已做（账号域） | HS256 访问令牌 2h、刷新令牌 30 天轮换（重放 1005）；注册/登录/刷新/登出已上线，其他域按需接 `get_current_user` |
