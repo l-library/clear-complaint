@@ -381,14 +381,12 @@ def test_missing_medication_gets_a_second_round(
     fields = ["onset", "duration", "location", "character", "associated_symptoms"]
     first = _needs_clarification(fields)
     first["clarification_request"]["missing_fields"] = fields + ["medication"]
+    # io.5 契约：缺项补问走 needs_clarification；insufficient_evidence 恒为空检索
+    second = _needs_clarification(["medication"])
     fake = Platform(
         [
             first,
-            {
-                "status": "insufficient_evidence",
-                "missing_fields": ["medication"],
-                "unknown_fields": [],
-            },
+            second,
             _draft_ready(),
         ]
     )
@@ -421,6 +419,55 @@ def test_missing_medication_gets_a_second_round(
     assert fake.calls[2]["normalized"]["medication"] == "unknown"
     detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
     assert detail["episode"]["status"] == "ready"
+
+
+def test_empty_retrieval_insufficient_falls_back_without_asking(
+    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """io.5：空检索重试一次后 insufficient_evidence，缺项未评估、不可补问。"""
+    fake = Platform(
+        [
+            {
+                "status": "insufficient_evidence",
+                "error_code": "NO_RETRIEVAL_EVIDENCE",
+                "missing_fields": [],
+                "unknown_fields": [],
+                "clarification_request": None,
+                "draft": None,
+                "needs_backend_fallback": True,
+                "retrieval": {
+                    "attempts": 2,
+                    "retry_used": True,
+                    "status": "empty",
+                    "field_status_evaluated": False,
+                },
+            }
+        ]
+    )
+    monkeypatch.setattr(platform, "call_triage", fake)
+
+    with db_client.stream(
+        "POST",
+        "/api/episodes",
+        json={"complaint": "合成测试：鼻塞流涕"},
+        headers=_sse_headers(user),
+    ) as stream:
+        body = stream.read().decode()
+    events = _parse_events(body)
+    done = dict(events[-1][1])
+
+    assert events[-1][0] == "done"
+    assert done["degraded"] is True
+    # 只调了一次平台：空检索不触发补问轮
+    assert len(fake.calls) == 1
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["episode"]["status"] == "ready"
+    assert detail["gate"]["retrieval"] == {
+        "attempts": 2,
+        "retry_used": True,
+        "status": "empty",
+        "field_status_evaluated": False,
+    }
 
 
 def test_needs_clarification_then_answer(
