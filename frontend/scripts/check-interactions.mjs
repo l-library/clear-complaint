@@ -126,7 +126,7 @@ const settle = async () => { for (let i = 0; i < 16; i += 1) { await Promise.res
 function setup(route = 'pages/index/index') {
   const auth = vue.reactive({ user: { id: 1 }, isLoggedIn: true, ensureFreshSession: async () => true })
   let failCreate = false, detailResolver, delayedDetail = false
-  const creations = [], saves = [], routes = [], flights = []
+  const creations = [], routes = [], flights = []
   let page = { route, options: {} }
   const episodes = {
     listEpisodes: async () => ({ records: [], total: 0, page: 1, size: 20 }),
@@ -137,7 +137,6 @@ function setup(route = 'pages/index/index') {
       event({ event: 'done', data: { episode_id: 71 } })
     },
     getEpisode: () => delayedDetail ? new Promise((resolve) => { detailResolver = resolve }) : Promise.resolve(clone(detail)),
-    saveEpisode: async (...args) => { saves.push(args); return { saved_at: '2026-11-22 10:00:00', reminder: args[1] ? { id: 91, kind: 'recheck', due_at: '2026-11-25 09:00:00' } : null } },
     clarifyEpisodeStream: async () => {}, skipClarifyStream: async () => {}, retryEpisodeStream: async () => {},
   }
   const uni = {
@@ -157,7 +156,7 @@ function setup(route = 'pages/index/index') {
   if (route !== 'pages/index/index') store.openWorkspace('chat')
   const component = scope.run(() => modules('@/components/QWorkspace.vue').default.setup({}, { expose() {} }))
   component.messageTransition.value = { play: (...args) => flights.push(args) }
-  return { auth, store, component, creations, saves, routes, flights, stop: () => scope.stop(), setFail: (value) => { failCreate = value }, delay: () => { delayedDetail = true }, resolve: () => detailResolver?.(clone(detail)) }
+  return { auth, store, component, creations, routes, flights, stop: () => scope.stop(), setFail: (value) => { failCreate = value }, delay: () => { delayedDetail = true }, resolve: () => detailResolver?.(clone(detail)) }
 }
 for (const route of ['pages/index/index', 'pages/chat/index']) {
   const app = setup(route)
@@ -175,12 +174,9 @@ for (const route of ['pages/index/index', 'pages/chat/index']) {
   assert.match(app.routes[0], /^\/pages\/chat\/index\?conversation_id=71/)
   assert.equal(app.store.result.triage, 'clinic')
   assert.equal(app.store.messages.length, 1, 'No canned assistant messages may appear')
-  await app.store.saveConversation(false, '2026-11-25')
-  assert.deepEqual(app.saves[0], [71, false, '2026-11-25'])
+  // 生成完成即自动归档（issue #24）：详情带 saved_at，没有任何保存请求要发
   app.store.detail.episode.saved_at = '2026-11-22 10:00:00'
-  await app.store.saveConversation(true, '2026-11-26')
-  assert.deepEqual(app.saves[1], [71, true, '2026-11-26'], 'An archived episode must still allow a reminder request')
-  assert.match(app.store.saveNotice, /2026-11-25 09:00:00/)
+  assert.equal(app.store.saved, true, 'A completed consult must read as archived')
   app.component.goHome()
   await settle()
   assert.equal(app.store.screen, 'landing', 'Returning home must restore the separate landing page')
@@ -242,15 +238,11 @@ reviewProps.detail = null
 assert.equal(review.fields.value.length, 0)
 assert.equal(review.hasGate.value, false)
 
-const rangeWorkspace = vue.reactive({ detail: clone(detail) })
-const rangeComponent = loader({ '@/stores/liveWorkspace': { useLiveWorkspaceStore: () => rangeWorkspace } })('@/components/QConsultationFlow.vue').default.setup({}, { expose() {} })
-assert.equal(rangeComponent.recheckRange.value.start, '2026-11-25')
-assert.equal(rangeComponent.recheckRange.value.end, '2026-12-06')
-const renderedWorkspace = { detail: clone(detail), result: clone(detail.result), questions: [], saved: true, pending: false, recheckDate: '', saveNotice: '', followUpReminder: null }
+const renderedWorkspace = { detail: clone(detail), result: clone(detail.result), questions: [], saved: true, pending: false, followUpReminder: null }
 const renderFlow = () => renderComponent('QConsultationFlow', {}, { '@/stores/liveWorkspace': { useLiveWorkspaceStore: () => renderedWorkspace } })
-assert.match(await renderFlow(), /补建就诊提醒/)
+assert.match(await renderFlow(), /按建议就诊前会收到提醒/)
 renderedWorkspace.result.triage = 'emergency'
-assert.doesNotMatch(await renderFlow(), /补建就诊提醒|补建随访提醒/)
+assert.doesNotMatch(await renderFlow(), /按建议就诊前会收到提醒|补建就诊提醒/)
 renderedWorkspace.result = null
 renderedWorkspace.followUpReminder = { title: 'SYNTHETIC FOLLOWUP', status: 'done' }
 renderedWorkspace.followUpResponse = { advice: { text: 'SYNTHETIC ADVICE' }, supplement: { prepare_idx: [0, 2], watch_for: [], next_question: '' } }

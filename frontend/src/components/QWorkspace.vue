@@ -102,7 +102,7 @@
                 </view>
               </scroll-view>
               <view class="conversation-composer">
-                <view class="conversation-tools"><text>{{ isFollowUp ? '提交后保存本次随访' : '核对建议后，可保存至健康档案' }}</text><button v-if="!isFollowUp" role="button" tabindex="0" @keydown="activateButton" class="save-button" :disabled="pending || saved || !store.result" @click="saveCurrentConversation"><QIcon :name="saved ? 'check' : 'save'" /><text>{{ saved ? '已归档' : '核对并归档' }}</text></button></view>
+                <view class="conversation-tools"><text>{{ isFollowUp ? '提交后保存本次随访' : saved ? '问诊完成，已保存至健康档案，并按建议安排了提醒。' : '问诊完成后自动保存至健康档案。' }}</text></view>
                 <view v-if="isCompletedFollowUp" class="completed-conversation"><QIcon name="check" /><text>本次随访已完成，记录已归档。出现新的不适可以新建问诊。</text><button role="button" tabindex="0" @keydown="activateButton" @click="requestNewConversation">新建问诊</button></view>
                 <QComposer v-else ref="replyComposer" v-model="draft" compact :context-label="isFollowUp ? '随访回复' : '问诊交流'" :placeholder="isFollowUp ? '随访补充说明…' : store.result ? '描述新的不适，开始新问诊…' : '请先填写上方的补充问题…'" :pending="pending" :error="error" @send="handleSend" @attach="navigate('archive')" />
                 <text class="medical-note">健康信息整理，不构成诊断。</text>
@@ -244,16 +244,6 @@ async function openConversation(id: string) {
 function openFollowUp(reminder: ReminderItem) {
   store.startFollowUp(reminder)
   navigate('chat')
-}
-
-function saveCurrentConversation() {
-  uni.showModal({
-    title: '核对并归档咨询记录',
-    content: '确认将本次就医建议保存至健康档案？这不等同于医生诊断。',
-    confirmText: '确认归档',
-    cancelText: '继续核对',
-    success: (result) => { if (result.confirm) void store.saveConversation(store.saveReminder, store.recheckDate || undefined) },
-  })
 }
 
 function goHome() {
@@ -423,9 +413,6 @@ watch([messageCount, pending, activeTab, () => activeConversation.value?.id], as
 .message-end { height: 1px; }
 .conversation-composer { --composer-height: calc(173 * var(--u)); padding-top: 18px; flex-shrink: 0; }
 .conversation-tools { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-bottom: max(10px, calc(20 * var(--u))); font-size: clamp(11px, calc(16 * var(--u)), 18px); color: var(--muted); }
-.save-button { display: flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 7px; min-height: 36px; margin: 0; padding: 5px 0 5px 10px; color: var(--accent); background: transparent; font-size: clamp(13px, calc(18 * var(--u)), 21px); line-height: 1.4; }
-.save-button .q-icon { width: 18px; height: 18px; opacity: .65; }
-.save-button[disabled] { background: transparent; color: var(--muted); opacity: .65; }
 .context-column {
   --muted: #657064;
   --glass-surface: rgba(255, 255, 255, .42);

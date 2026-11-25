@@ -66,15 +66,6 @@ export interface EpisodeDetail {
   } | null
 }
 
-export interface SaveResponse {
-  saved_at: string | null
-  reminder: {
-    id: number
-    kind: string
-    due_at: string
-  } | null
-}
-
 export interface EpisodeSummary {
   id: number
   status: string
@@ -155,14 +146,6 @@ export function retryEpisodeStream(
 
 export function getEpisode(id: number): Promise<EpisodeDetail> {
   return request(`/episodes/${id}`, { auth: true })
-}
-
-export function saveEpisode(id: number, reminder = true, recheckDate?: string): Promise<SaveResponse> {
-  return request(`/episodes/${id}/save`, {
-    method: 'POST',
-    data: { save: true, reminder, ...(recheckDate ? { recheck_date: recheckDate } : {}) },
-    auth: true,
-  })
 }
 
 export function deleteEpisode(id: number): Promise<null> {
