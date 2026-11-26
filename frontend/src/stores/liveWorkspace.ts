@@ -5,10 +5,11 @@ import { getProfile, type Profile } from '@/api/profile'
 import { respondReminder, type ReminderItem, type ReminderResponseResult } from '@/api/archive'
 import { createIdempotencyKey } from '@/request/idempotency'
 import {
-  createEpisodeStream, clarifyEpisodeStream, skipClarifyStream, retryEpisodeStream,
-  getEpisode, listEpisodes, type EpisodeDetail, type EpisodeSummary,
-  type EpisodeStreamEvent, type QuestionField,
+  createEpisodeStream, clarifyEpisodeStream, retryEpisodeStream,
+  getEpisode, listEpisodes, type AnswerAction, type EpisodeDetail, type EpisodeSummary,
+  type EpisodeStreamEvent, type PendingQuestion, type SafetyPayload,
 } from '@/api/episodes'
+
 
 export type WorkspaceTab = 'chat' | 'archive' | 'plans'
 
@@ -25,8 +26,10 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
   const patientProfile = ref<Profile | null>(null)
   const detail = ref<EpisodeDetail | null>(null)
   const episodeId = ref<number | null>(null)
-  const questions = ref<QuestionField[]>([])
-  const answers = ref<Record<string, string>>({})
+  const pendingQuestion = ref<PendingQuestion | null>(null)
+  const answerText = ref('')
+  const safety = ref<SafetyPayload | null>(null)
+  const notice = ref<{ kind: string; text: string } | null>(null)
   const history = ref<EpisodeSummary[]>([])
   const historyPage = ref(0)
   const historyTotal = ref(0)
@@ -50,7 +53,8 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
   function openWorkspace(tab: WorkspaceTab = 'chat') { screen.value = 'workspace'; activeTab.value = tab }
   function newConversation() {
     generation += 1; pending.value = false; messages.value = []; detail.value = null; episodeId.value = null
-    questions.value = []; answers.value = {}; error.value = ''; stage.value = ''; lastRequest = null
+    pendingQuestion.value = null; answerText.value = ''; safety.value = null; notice.value = null
+    error.value = ''; stage.value = ''; lastRequest = null
     followUpReminder.value = null; followUpResponse.value = null; followUpNote.value = ''
     followUpAnswers.value = { relieved: '', visited: '', new_symptom: '' }
     openWorkspace()
@@ -95,9 +99,14 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
   function message(cause: unknown) { return cause instanceof Error ? cause.message : '请求失败，请重试。' }
   function applyDetail(value: EpisodeDetail) {
     detail.value = value; episodeId.value = value.episode.id
-    const next = value.clarify?.questions || []
-    questions.value = next
-    answers.value = Object.fromEntries(next.map((question) => [question.field, answers.value[question.field] || '']))
+    const pending = value.clarify?.pending || null
+    // 恢复待答问题；同一编号不重复展示（后端台账幂等）
+    if (pending && pendingQuestion.value?.question_id !== pending.question_id) {
+      pendingQuestion.value = pending
+      answerText.value = ''
+    }
+    if (!pending) pendingQuestion.value = null
+    safety.value = value.gate?.crisis || null
   }
   async function openConversation(id: string) {
     if (!auth.isLoggedIn) { accountOpen.value = true; return false }
@@ -128,9 +137,27 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
         const id = Number(data.episode_id)
         if (Number.isSafeInteger(id) && id > 0) episodeId.value = id
         if (event.event === 'stage' && typeof data.text === 'string') stage.value = data.text
-        if (event.event === 'question' && Array.isArray(data.questions)) {
-          questions.value = data.questions as QuestionField[]
-          answers.value = Object.fromEntries(questions.value.map((question) => [question.field, '']))
+        if (event.event === 'question' && typeof data.question_id === 'string') {
+          // 单问协议（io.6 / request.v2）：一次一问，后端赋稳定号
+          pendingQuestion.value = {
+            question_id: String(data.question_id),
+            purpose: String(data.purpose || 'other'),
+            text: String(data.text || ''),
+            can_skip: Boolean(data.can_skip),
+            not_understood: Boolean(data.not_understood),
+          }
+          answerText.value = ''
+        }
+        if (event.event === 'safety' && data.kind === 'crisis') {
+          safety.value = {
+            kind: 'crisis',
+            rule_ids: Array.isArray(data.rule_ids) ? data.rule_ids.map(String) : [],
+            version: Number(data.version) || 0,
+            copy: Array.isArray(data.copy) ? data.copy.map(String) : [],
+          }
+        }
+        if (event.event === 'notice' && typeof data.text === 'string') {
+          notice.value = { kind: String(data.kind || ''), text: data.text }
         }
         if (event.event === 'error') error.value = typeof data.message === 'string' ? data.message : '生成失败，请重试。'
       })
@@ -154,23 +181,36 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
     if (!text) { error.value = '请先填写要描述的内容。'; return false }
     if (!readyToSend.value) { error.value = auth.isLoggedIn ? '请先完善出生日期与性别，并保存档案。' : '请先登录，再开始问诊。'; accountOpen.value = true; return false }
     if (followUpReminder.value) { followUpNote.value = text; void submitFollowUp(); return false }
-    if (questions.value.length) { error.value = '请先填写并提交下方的补充问题。'; return false }
+    if (pendingQuestion.value) { error.value = '请先回答上方的问题。'; return false }
+    // 结果后的继续补充沿用同一问诊（issue #23 修订机制），新建问诊走侧栏按钮
+    if (episodeId.value && result.value) {
+      addMessage('user', text); draft.value = ''
+      const id = episodeId.value
+      void runStream((onEvent) => clarifyEpisodeStream(id, { question_id: null, action: 'answer', text }, onEvent))
+      return false
+    }
     newConversation(); addMessage('user', text); draft.value = ''
     lastRequest = { complaint: text, key: createIdempotencyKey() }
     const request = lastRequest
     void runStream((onEvent) => createEpisodeStream(request.complaint, onEvent, patientProfile.value?.city_code || undefined, request.key))
     return true
   }
-  async function submitAnswers() {
-    if (!episodeId.value || pending.value) return
-    const values = questions.value.map((question) => ({ field: question.field, value: (answers.value[question.field] || '').trim() })).filter((item) => item.value)
-    if (!values.length) { error.value = '请至少补充一项信息，或选择跳过。'; return }
-    addMessage('user', values.map((item) => item.value).join('；'))
+  async function submitAnswer(action: AnswerAction, text?: string) {
+    const question = pendingQuestion.value
+    if (!episodeId.value || !question || pending.value) return
+    if (action === 'answer' && !answerText.value.trim() && !text?.trim()) {
+      error.value = '请写下回答，或选择不知道。'; return
+    }
+    // 契约第 3 节：对话里显示「我不清楚」「已跳过此问」，都不转成「没有」
+    addMessage('user', action === 'answer' ? (text ?? answerText.value).trim() : action === 'unknown' ? '我不清楚' : '已跳过此问')
     const id = episodeId.value
-    await runStream((onEvent) => clarifyEpisodeStream(id, values.map((item) => ({ ...item, is_unknown: ['不知道', '不确定', '跳过'].includes(item.value) })), onEvent))
-  }
-  async function skipClarify() {
-    if (episodeId.value && !pending.value) { const id = episodeId.value; await runStream((onEvent) => skipClarifyStream(id, onEvent)) }
+    const questionId = question.question_id
+    pendingQuestion.value = null
+    const answer = action === 'answer'
+      ? { question_id: questionId, action, text: (text ?? answerText.value).trim() }
+      : { question_id: questionId, action, text: '' }
+    answerText.value = ''
+    await runStream((onEvent) => clarifyEpisodeStream(id, answer, onEvent))
   }
   async function retry() {
     if (pending.value) return
@@ -203,8 +243,8 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
   }
   watch(() => auth.user?.id, () => { reset(); if (auth.isLoggedIn) void initialize() })
   return { auth, screen, activeTab, draft, messages, pending, error, stage, patientProfile, detail, result, episodeId,
-    questions, answers, saved, profile, activeConversation, recentConversations, history, historyTotal, historyPage,
+    pendingQuestion, answerText, safety, notice, saved, profile, activeConversation, recentConversations, history, historyTotal, historyPage,
     accountOpen, initialized, readyToSend, selectedPlanTab,
     followUpReminder, followUpAnswers, followUpNote, followUpResponse, startFollowUp, submitFollowUp,
-    initialize, loadHistory, openWorkspace, newConversation, openConversation, sendMessage, submitAnswers, skipClarify, retry, reset }
+    initialize, loadHistory, openWorkspace, newConversation, openConversation, sendMessage, submitAnswer, retry, reset }
 })

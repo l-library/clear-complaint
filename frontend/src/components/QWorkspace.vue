@@ -104,7 +104,7 @@
               <view class="conversation-composer">
                 <view class="conversation-tools"><text>{{ isFollowUp ? '提交后保存本次随访' : saved ? '问诊完成，已保存至健康档案，并按建议安排了提醒。' : '问诊完成后自动保存至健康档案。' }}</text></view>
                 <view v-if="isCompletedFollowUp" class="completed-conversation"><QIcon name="check" /><text>本次随访已完成，记录已归档。出现新的不适可以新建问诊。</text><button role="button" tabindex="0" @keydown="activateButton" @click="requestNewConversation">新建问诊</button></view>
-                <QComposer v-else ref="replyComposer" v-model="draft" compact :context-label="isFollowUp ? '随访回复' : '问诊交流'" :placeholder="isFollowUp ? '随访补充说明…' : store.result ? '描述新的不适，开始新问诊…' : '请先填写上方的补充问题…'" :pending="pending" :error="error" @send="handleSend" @attach="navigate('archive')" />
+                <QComposer v-else ref="replyComposer" v-model="draft" compact :context-label="isFollowUp ? '随访回复' : '问诊交流'" :placeholder="isFollowUp ? '随访补充说明…' : store.result ? '补充新情况，会更新这份建议…' : (store.pendingQuestion ? '回答上方的问题…' : '正在整理…')" :pending="pending" :error="error" @send="handleSend" @attach="navigate('archive')" />
                 <text class="medical-note">健康信息整理，不构成诊断。</text>
               </view>
             </view>
