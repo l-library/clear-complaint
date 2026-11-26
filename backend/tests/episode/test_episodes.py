@@ -7,6 +7,7 @@
 import json
 import re
 from collections.abc import Awaitable, Callable
+from datetime import timedelta
 from functools import partial
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -17,11 +18,15 @@ from httpx import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agent import crisis
 from app.agent.client import invoke_workflow  # noqa: F401  确保客户端可导入
+from app.agent.normalize import normalize
+from app.common.clock import now_shanghai
 from app.common.codes import ErrorCode
 from app.common.errors import BizException
 from app.core.config import get_settings
-from app.episode import platform
+from app.episode import models as episode_models
+from app.episode import platform, v2
 from app.reminder import models as reminder_models
 
 _POOL_CONTENT = "以鼻塞、流涕、喷嚏、咽痛为主要表现，全身症状较轻。"
@@ -43,6 +48,9 @@ def _draft_ready(
         conditions = [_valid_condition()]
     return {
         "status": "draft_ready",
+        "understanding": {},
+        "normalized": {"symptom": "发热", "onset": None, "duration": None},
+        "self_attribution": [],
         "draft": {
             "triage": triage,
             "department_primary": department,
@@ -74,16 +82,30 @@ def _valid_condition() -> dict[str, Any]:
     }
 
 
-def _needs_clarification(fields: list[str]) -> dict[str, Any]:
+def _question_response(
+    purpose: str = "duration",
+    text: str = "这次不舒服持续多久了？",
+    status: str = "needs_clarification",
+) -> dict[str, Any]:
+    """单问响应：question_id 为空由后端赋号（契约第 3 节）。"""
     return {
-        "status": "needs_clarification",
-        "clarification_request": {
-            "round": 1,
-            "round_limit": 5,
-            "question_fields": fields,
-            "missing_fields": fields,
-        },
+        "status": status,
+        "understanding": {},
+        "normalized": {"symptom": "发热"},
+        "self_attribution": [],
+        "question": {"question_id": None, "purpose": purpose, "text": text, "can_skip": True},
+        "draft": None,
     }
+
+
+def _understood(base: dict[str, Any], **facts: str) -> dict[str, Any]:
+    """预置 understanding：把测试放到指定问答阶段，事实来源都是合成原文。"""
+    payload = dict(base)
+    payload["understanding"] = {
+        "schema_version": "clear-complaint.triage.understanding.v1",
+        "facts": {key: {"status": "known", "value": value} for key, value in facts.items()},
+    }
+    return payload
 
 
 def _register(client: TestClient, phone: str) -> dict[str, Any]:
@@ -168,6 +190,12 @@ class Platform:
         outcome = self.results.pop(0)
         if isinstance(outcome, Exception):
             raise outcome
+        # v2 回显：真实平台会带这三个关联字段，打桩缺省时自动补齐
+        outcome.setdefault("schema_version", "clear-complaint.triage.workflow.v2")
+        outcome.setdefault("workflow_version", "2026-11-26.mainflow-io.6")
+        outcome.setdefault("request_id", request["request_id"])
+        outcome.setdefault("episode_id", request["episode_id"])
+        outcome.setdefault("base_revision", request["base_revision"])
         return outcome
 
 
@@ -284,8 +312,9 @@ def test_draft_ready_streams_full_result(
     assert detail["episode"]["status"] == "saved"
     assert detail["gate"]["citations_verified"] == 1
     assert detail["profile_snapshot"]["sex"] == "female"
-    # normalize 的口语折算：流鼻涕 → 流涕（app/agent/normalize.py 的 COLLOQUIAL_MAP）
-    assert detail["normalized"]["symptom"] == ["流涕三天了"]
+    # v2：normalized 是理解输出的回填（平台字段名折成公开字段名，symptom 为列表）
+    assert detail["normalized"]["symptom"] == ["发热"]
+    assert detail["episode"]["revision"] == 0
 
 
 def test_platform_unavailable_falls_back(
@@ -381,48 +410,35 @@ def test_unknown_condition_name_is_dropped(
 # ---- 追问 ----
 
 
-def test_missing_medication_gets_a_second_round(
+def test_medication_question_single_round_flow(
     db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fields = ["onset", "duration", "location", "character", "associated_symptoms"]
-    first = _needs_clarification(fields)
-    first["clarification_request"]["missing_fields"] = fields + ["medication"]
-    # io.5 契约：缺项补问走 needs_clarification；insufficient_evidence 恒为空检索
-    second = _needs_clarification(["medication"])
+    """v2 单问流程：一次一问、答案原文进台账、平台收到累计回答。"""
     fake = Platform(
         [
-            first,
-            second,
+            _question_response("medication", "这次生病后用过什么药吗？"),
             _draft_ready(),
         ]
     )
     monkeypatch.setattr(platform, "call_triage", fake)
     _post_episode(db_client, user, complaint="合成测试：鼻塞流涕", key=_KEY)
-    answers = [
-        {"field": "onset_at", "value": "两天前"},
-        {"field": "duration_text", "value": "1–3 天"},
-        {"field": "site", "value": "鼻部"},
-        {"field": "nature", "value": "鼻塞"},
-        {"field": "associated", "value": "流涕"},
-    ]
+
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["episode"]["status"] == "clarifying"
+    assert detail["clarify"]["pending"]["purpose"] == "medication"
+    assert detail["clarify"]["asked_count"] == 1
+
     response = db_client.post(
         "/api/episodes/1/clarify",
-        json={"answers": answers},
+        json={"question_id": "q1", "action": "unknown", "text": ""},
         headers=_sse_headers(user, "11111111-2222-4333-8444-555555555555"),
     )
     assert response.status_code == 200
-    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
-    assert detail["clarify"]["round"] == 2
-    assert [item["field"] for item in detail["clarify"]["questions"]] == ["medications_text"]
-    assert fake.calls[1]["normalized"]["duration"] == "一至三天"
-    assert detail["normalized"]["duration_text"] == "1–3 天"
-    response = db_client.post(
-        "/api/episodes/1/clarify",
-        json={"answers": [{"field": "medications_text", "value": "不清楚"}]},
-        headers=_sse_headers(user, "22222222-3333-4444-8555-666666666666"),
-    )
-    assert response.status_code == 200
-    assert fake.calls[2]["normalized"]["medication"] == "unknown"
+    # 第二次调用带累计台账：unknown 动作原样传递，不转成「没有」
+    assert fake.calls[1]["answers"] == [
+        {"answer_id": "a1", "question_id": "q1", "action": "unknown", "text": ""}
+    ]
+    assert fake.calls[1]["base_revision"] == 0
     detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
     assert detail["episode"]["status"] == "saved"
 
@@ -476,13 +492,12 @@ def test_empty_retrieval_insufficient_falls_back_without_asking(
     }
 
 
-def test_needs_clarification_then_answer(
+def test_single_question_then_answer(
     db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake = Platform(
         [
-            # 平台字段名：character 对应公开的 nature
-            _needs_clarification(["duration", "character"]),
+            _question_response("duration", "这次不舒服持续多久了？"),
             _draft_ready(triage="clinic", department="呼吸内科"),
         ]
     )
@@ -493,12 +508,15 @@ def test_needs_clarification_then_answer(
     ) as stream:
         body = stream.read().decode()
     events = _parse_events(body)
-    question = dict([event for event in events if event[0] == "question"][0][1])
+    questions = [event for event in events if event[0] == "question"]
+    assert len(questions) == 1, "单问协议：一次调用只下发一个问题"
+    question = dict(questions[0][1])
 
-    assert question["round"] == 1
-    fields = [q["field"] for q in question["questions"]]
-    assert fields == ["duration_text", "nature"]
-    assert question["questions"][0]["options"]
+    # 后端赋号：question_id 稳定，答案凭它关联
+    assert question["question_id"] == "q1"
+    assert question["purpose"] == "duration"
+    assert question["text"] == "这次不舒服持续多久了？"
+    assert question["can_skip"] is True
     assert "done" not in _names(events)
 
     detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
@@ -507,7 +525,7 @@ def test_needs_clarification_then_answer(
     with db_client.stream(
         "POST",
         "/api/episodes/1/clarify",
-        json={"answers": [{"field": "duration_text", "value": "三天"}]},
+        json={"question_id": "q1", "action": "answer", "text": "三天了"},
         headers=_sse_headers(user, "33333333-4444-4555-8666-777777777777"),
     ) as stream:
         body = stream.read().decode()
@@ -515,24 +533,28 @@ def test_needs_clarification_then_answer(
 
     assert events[-1][0] == "done"
     second_request = fake.calls[1]
-    assert second_request["normalized"]["duration"] == "三天"
-    assert second_request["clarification"]["round"] == 1
+    # 原文进：答案逐字进台账，后端不做字段折算
+    assert second_request["answers"] == [
+        {"answer_id": "a1", "question_id": "q1", "action": "answer", "text": "三天了"}
+    ]
+    assert second_request["clarification"]["asked_count"] == 1
 
     detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
-    assert detail["normalized"]["duration_text"] == "三天"
-    assert detail["gate"]["clarify_rounds"] == 1
+    assert detail["episode"]["status"] == "saved"
+    # understanding 回传验证由真实联调覆盖；这里验证回填展示来自理解输出
+    assert detail["normalized"]["symptom"] == ["发热"]
 
 
-def test_clarify_rejects_unknown_field(
+def test_answer_rejects_wrong_question_id(
     db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake = Platform([_needs_clarification(["duration"])])
+    fake = Platform([_question_response("duration")])
     monkeypatch.setattr(platform, "call_triage", fake)
     _post_episode(db_client, user, complaint="我流鼻涕", key="44444444-5555-4666-8777-888888888888")
 
     response = db_client.post(
         "/api/episodes/1/clarify",
-        json={"answers": [{"field": "nature", "value": "胀痛"}]},
+        json={"question_id": "q9", "action": "answer", "text": "三天"},
         headers=_sse_headers(user, "55555555-6666-4777-8888-999999999999"),
     )
 
@@ -540,17 +562,17 @@ def test_clarify_rejects_unknown_field(
     assert _body(response)["code"] == 2007
 
 
-def test_clarify_answer_can_raise_red_flag(
+def test_answer_can_raise_red_flag(
     db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake = Platform([_needs_clarification(["associated_symptoms"])])
+    fake = Platform([_question_response("associated_symptoms", "还有别的不舒服吗？")])
     monkeypatch.setattr(platform, "call_triage", fake)
     _post_episode(db_client, user, complaint="我流鼻涕", key="66666666-7777-4888-8999-aaaaaaaaaaaa")
 
     with db_client.stream(
         "POST",
         "/api/episodes/1/clarify",
-        json={"answers": [{"field": "associated", "value": "胸口疼得厉害，出冷汗"}]},
+        json={"question_id": "q1", "action": "answer", "text": "胸口疼得厉害，出冷汗"},
         headers=_sse_headers(user, "77777777-8888-4999-8aaa-bbbbbbbbbbbb"),
     ) as stream:
         body = stream.read().decode()
@@ -562,11 +584,15 @@ def test_clarify_answer_can_raise_red_flag(
     assert done["gate"]["red_flags"]
     assert len(fake.calls) == 1  # 答案命中红旗后不再调平台
 
+    # 台账保留原文：红旗短路不清回答记录
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["episode"]["status"] == "saved"
+
 
 def test_skip_clarify_generates(
     db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake = Platform([_needs_clarification(["duration"]), _draft_ready()])
+    fake = Platform([_question_response("duration"), _draft_ready()])
     monkeypatch.setattr(platform, "call_triage", fake)
     _post_episode(db_client, user, complaint="我流鼻涕", key="88888888-9999-4000-8bbb-cccccccccccc")
 
@@ -581,23 +607,35 @@ def test_skip_clarify_generates(
 
     assert events[-1][0] == "done"
     assert fake.calls[1]["clarification"]["skipped"] is True
+    assert fake.calls[1]["answers"] == []
 
 
-def test_clarify_requires_clarifying_state(
+def test_answer_requires_valid_state(
     db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake = Platform([_draft_ready()])
     monkeypatch.setattr(platform, "call_triage", fake)
     _post_episode(db_client, user)
 
+    # 已完成（saved）的问诊：带问题号的回答被拒，主动补充必须 question_id=null
     response = db_client.post(
         "/api/episodes/1/clarify",
-        json={"answers": [{"field": "duration_text", "value": "三天"}]},
+        json={"question_id": "q1", "action": "answer", "text": "三天"},
         headers=_sse_headers(user, "aaaaaaa1-bbbb-4222-8ddd-eeeeeeeeeeee"),
     )
-
     assert response.status_code == 409
     assert _body(response)["code"] == 2005
+
+    # 合法的主动补充：走同一端点，question_id 为 null
+    with db_client.stream(
+        "POST",
+        "/api/episodes/1/clarify",
+        json={"question_id": None, "action": "answer", "text": "补充：还有点咳嗽"},
+        headers=_sse_headers(user, "aaaaaaa2-bbbb-4222-8ddd-eeeeeeeeeeee"),
+    ) as stream:
+        stream.read()
+    assert fake.calls[1]["answers"][-1]["question_id"] is None
+    assert fake.calls[1]["base_revision"] == 0
 
 
 # ---- 重试 ----
@@ -839,3 +877,252 @@ def test_delete_removes_episode(
 
     detail = db_client.get("/api/episodes/1", headers=_auth(user))
     assert detail.status_code == 404
+
+
+# ---- v2 状态机：三出口与修订（issue #23） ----
+
+
+def _coverage_response(triage: str, department: str = "皮肤科") -> dict[str, Any]:
+    return {
+        "status": "out_of_coverage",
+        "understanding": {},
+        "normalized": {"symptom": "皮疹"},
+        "self_attribution": [],
+        "question": None,
+        "draft": {
+            "triage": triage,
+            "department_primary": department,
+            "department_secondary": None,
+            "conditions": [],
+        },
+        "output_list": [],
+    }
+
+
+def test_out_of_coverage_valve_lifts_self_observe(
+    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = Platform([_coverage_response("self_observe")])
+    monkeypatch.setattr(platform, "call_triage", fake)
+    _post_episode(db_client, user, complaint="合成测试：皮肤起了红点", key=_KEY)
+
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    # 单向阀：无引用的 self_observe 抬到 clinic，conditions 整节空
+    assert detail["result"]["triage"] == "clinic"
+    assert detail["result"]["out_of_coverage"] is True
+    assert detail["result"]["conditions"] == []
+    assert detail["gate"]["out_of_coverage"] is True
+    assert detail["episode"]["status"] == "saved"
+
+
+def test_out_of_coverage_keeps_emergency(
+    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = Platform([_coverage_response("emergency", "急诊科")])
+    monkeypatch.setattr(platform, "call_triage", fake)
+    _post_episode(db_client, user, complaint="合成测试：剧烈头痛", key=_KEY)
+
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["result"]["triage"] == "emergency"
+
+
+def test_not_understood_with_question_forwards_single_question(
+    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = Platform(
+        [
+            _question_response("other", "想说说哪里不舒服吗？", status="not_understood"),
+        ]
+    )
+    monkeypatch.setattr(platform, "call_triage", fake)
+    with db_client.stream(
+        "POST", "/api/episodes", json={"complaint": "我今天吃了火锅"}, headers=_sse_headers(user)
+    ) as stream:
+        body = stream.read().decode()
+    events = _parse_events(body)
+    questions = [event for event in events if event[0] == "question"]
+
+    # 没听懂版：对话式追问，不吐分诊模板
+    assert len(questions) == 1
+    assert questions[0][1]["not_understood"] is True
+    assert "done" not in _names(events)
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["result"] is None
+
+
+def test_not_understood_without_question_ends_gently(
+    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = Platform([{"status": "not_understood", "question": None, "understanding": {}}])
+    monkeypatch.setattr(platform, "call_triage", fake)
+    _post_episode(db_client, user, complaint="asdfgh", key=_KEY)
+
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["result"] is None
+    assert detail["gate"]["not_understood"] is True
+
+
+def test_supplement_after_result_creates_revision(
+    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = Platform(
+        [
+            _draft_ready(triage="clinic", department="呼吸内科"),
+            _draft_ready(triage="clinic", department="呼吸内科"),
+        ]
+    )
+    monkeypatch.setattr(platform, "call_triage", fake)
+    _post_episode(db_client, user, complaint="合成测试：发热", key=_KEY)
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["episode"]["revision"] == 0
+
+    # 结果后主动补充：question_id=null，基于当前修订（base_revision=0）
+    with db_client.stream(
+        "POST",
+        "/api/episodes/1/clarify",
+        json={"question_id": None, "action": "answer", "text": "补充：今天开始咳嗽了"},
+        headers=_sse_headers(user, "bbbbbbb1-cccc-4ddd-8eee-ffffffffffff"),
+    ) as stream:
+        body = stream.read().decode()
+    events = _parse_events(body)
+    assert events[-1][0] == "done"
+
+    assert fake.calls[1]["base_revision"] == 0
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    # 旧版本保留为可回看历史，saved_at 不随修订重置
+    assert detail["episode"]["revision"] == 1
+    assert detail["result_history"][0]["revision"] == 0
+    assert detail["result_history"][0]["result"]["triage"] == "clinic"
+
+
+def test_stale_revision_result_is_discarded(
+    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    late = _draft_ready(triage="self_observe", department="全科医学科")
+    late["base_revision"] = -1  # 基于旧修订的迟到结果
+    fake = Platform([_draft_ready(triage="clinic", department="呼吸内科"), late])
+    monkeypatch.setattr(platform, "call_triage", fake)
+    _post_episode(db_client, user, complaint="合成测试：发热", key=_KEY)
+
+    with db_client.stream(
+        "POST",
+        "/api/episodes/1/clarify",
+        json={"question_id": None, "action": "answer", "text": "补充：咳嗽加重"},
+        headers=_sse_headers(user, "ccccccc1-dddd-4eee-8fff-aaaaaaaaaaaa"),
+    ) as stream:
+        body = stream.read().decode()
+    events = _parse_events(body)
+
+    # 迟到结果被丢弃：播当前已落库的结论，revision 不推进
+    done = dict(events[-1][1])
+    assert done["triage"] == "clinic"
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["episode"]["revision"] == 0
+    assert detail["result"]["triage"] == "clinic"
+
+
+def test_ask_limit_forces_stop_before_platform_call(
+    db_client: TestClient,
+    user: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    run_db: Callable[[Callable[[AsyncSession], Awaitable[Any]]], Any],
+) -> None:
+    """B02：到达周期上限后整体停止补问，工作流按现有信息收尾，不硬停。"""
+    user_id = user["user"]["id"] if isinstance(user, dict) and "user" in user else 1
+    episode = episode_models.Episode(
+        user_id=user_id,
+        status="clarifying",
+        complaint_text="合成测试：发热",
+        raw_answers=[
+            {"answer_id": f"a{i + 1}", "question_id": f"q{i + 1}", "action": "answer", "text": "答"}
+            for i in range(v2.ASK_LIMIT_INITIAL)
+        ],
+        clarify_state={
+            "asked_count": v2.ASK_LIMIT_INITIAL,
+            "skipped": False,
+            "questions": {f"q{i + 1}": {"purpose": "other"} for i in range(v2.ASK_LIMIT_INITIAL)},
+            "pending_question_id": f"q{v2.ASK_LIMIT_INITIAL}",
+            "pending": {
+                "question_id": f"q{v2.ASK_LIMIT_INITIAL}",
+                "purpose": "other",
+                "text": "还想补充什么吗？",
+                "can_skip": True,
+            },
+        },
+        expires_at=now_shanghai() + timedelta(days=30),
+    )
+
+    async def seed(session: AsyncSession) -> int:
+        session.add(episode)
+        await session.commit()
+        return episode.id
+
+    episode_id = run_db(seed)
+    fake = Platform([_draft_ready(triage="clinic", department="呼吸内科")])
+    monkeypatch.setattr(platform, "call_triage", fake)
+
+    # 上限已到：回答触发的下一轮调用必须带 skipped=true
+    with db_client.stream(
+        "POST",
+        f"/api/episodes/{episode_id}/clarify",
+        json={"question_id": f"q{v2.ASK_LIMIT_INITIAL}", "action": "answer", "text": "没了"},
+        headers=_sse_headers(user),
+    ) as stream:
+        body = stream.read().decode()
+    events = _parse_events(body)
+
+    assert events[-1][0] == "done"
+    assert fake.calls[0]["clarification"]["skipped"] is True
+    assert fake.calls[0]["clarification"]["asked_count"] == v2.ASK_LIMIT_INITIAL
+    detail = _body(db_client.get(f"/api/episodes/{episode_id}", headers=_auth(user)))["data"]
+    assert detail["episode"]["status"] == "saved"
+
+
+def test_crisis_short_circuits_at_intake(
+    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """危机命中：不调工作流、固定应对走 safety 事件、不进分诊（issue #23 第 6 节）。"""
+    synthetic = (
+        crisis.CrisisHit(rule_id="CR01", name="自伤意图", triggers=(normalize("不想活"),)),
+    )
+    monkeypatch.setattr(crisis, "rules", lambda: synthetic)
+
+    no_platform = Platform([])
+    monkeypatch.setattr(platform, "call_triage", no_platform)
+
+    with db_client.stream(
+        "POST", "/api/episodes", json={"complaint": "我最近不想活了"}, headers=_sse_headers(user)
+    ) as stream:
+        body = stream.read().decode()
+    events = _parse_events(body)
+    names = _names(events)
+
+    assert no_platform.calls == [], "危机短路不得调用平台"
+    assert "safety" in names
+    safety = dict([event for event in events if event[0] == "safety"][0][1])
+    assert safety["kind"] == "crisis"
+    assert any("12356" in line for line in safety["copy"])
+    # 不是分诊结论：没有 result_section
+    assert "result_section" not in names
+
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["result"] is None
+    assert detail["gate"]["crisis"]["kind"] == "crisis"
+    assert detail["episode"]["status"] == "saved"
+
+
+def test_answer_idempotent_replay_calls_platform_once(
+    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """同键同文（含原话）幂等重放：平台只被调用一次。"""
+    fake = Platform([_question_response("duration"), _draft_ready()])
+    monkeypatch.setattr(platform, "call_triage", fake)
+    _post_episode(db_client, user, complaint="我流鼻涕", key=_KEY)
+
+    for _ in range(2):
+        db_client.post(
+            "/api/episodes/1/clarify",
+            json={"question_id": "q1", "action": "answer", "text": "三天了"},
+            headers=_sse_headers(user, "ddddddd1-eeee-4fff-8aaa-bbbbbbbccccc"),
+        )
+    assert len(fake.calls) == 2  # 首问 + 一次回答；重放未再调用

@@ -48,16 +48,21 @@ MEDICATION_LIMIT = 40
 # understanding 是工作流回传的不透明状态：后端只管体积与结构，不解释内容
 UNDERSTANDING_MAX_CHARS = 65536
 ANSWER_TEXT_MAX_CHARS = 500
+# 平台侧 answers 最多 100 项（api-agentarts 16.3-v2 字段表）
+ANSWER_LEDGER_LIMIT = 100
 # 提问计数（契约第 5 节）：唯一问题计，unknown/skip 计入，重试不计数
 ASK_LIMIT_INITIAL = 10
 ASK_LIMIT_REVISION = 5
 
 
-def validate_understanding(value: object) -> dict[str, Any] | None:
+def validate_understanding(
+    value: object, *, episode_id: int | None = None
+) -> dict[str, Any] | None:
     """首次调用传 None；此后回传上次响应的 understanding 对象。
 
-    只做信任边界校验：必须是对象、序列化后不超过体积上限。内容是工作流的
-    内部状态，后端不读也不改，避免两边各自解释一遍。
+    只做信任边界校验：必须是对象、序列化后不超过体积上限；对象自带 episode_id
+    时必须与当前问诊一致，防止跨问诊状态被注进请求。内容是工作流的内部状态，
+    后端不读也不改，避免两边各自解释一遍。
     """
     if value is None:
         return None
@@ -65,6 +70,9 @@ def validate_understanding(value: object) -> dict[str, Any] | None:
         raise BizException(ErrorCode.INVALID_PARAM, "understanding 须为对象")
     if len(json.dumps(value, ensure_ascii=False)) > UNDERSTANDING_MAX_CHARS:
         raise BizException(ErrorCode.INVALID_PARAM, "understanding 状态超出体积上限")
+    marker = value.get("episode_id")
+    if episode_id is not None and isinstance(marker, str) and marker != str(episode_id):
+        raise BizException(ErrorCode.INVALID_PARAM, "understanding 归属与当前问诊不符")
     return value
 
 
@@ -74,6 +82,8 @@ def validate_answers(answers: list[dict[str, Any]]) -> list[dict[str, Any]]:
     主动补充允许 question_id=None；unknown 与 skip 的 text 允许空串，
     但不转写成「没有」，原文有什么传什么。
     """
+    if len(answers) > ANSWER_LEDGER_LIMIT:
+        raise BizException(ErrorCode.INVALID_PARAM, "answers 台账超出上限")
     seen: set[str] = set()
     for answer in answers:
         answer_id = str(answer.get("answer_id", ""))
@@ -182,6 +192,18 @@ def build_v2_request(
     }
 
 
+# 理解输出的 normalized 用平台字段名，公开展示字段名反向映射（symptom 特判为列表）
+PLATFORM_TO_PUBLIC = {
+    "symptom": "symptom",
+    "onset": "onset_at",
+    "duration": "duration_text",
+    "location": "site",
+    "character": "nature",
+    "associated_symptoms": "associated",
+    "medication": "medications_text",
+}
+
+
 # ---- 结果修订与提问台账（issue #23 契约第 1、3、5 节） ----
 # 旧结果只保留最近三版：修订是低频对象，回看用，不建独立表
 RESULT_HISTORY_CAP = 3
@@ -273,6 +295,8 @@ def is_stale_revision(episode: Episode, base_revision: int) -> bool:
     return int(base_revision) < int(episode.revision or 0)
 
 
-def store_understanding(episode: Episode, blob: dict[str, Any] | None) -> None:
-    """落库工作流回传的 understanding：校验后原样保存，下一轮原样回传。"""
-    episode.understanding = validate_understanding(blob)
+def store_understanding(
+    episode: Episode, blob: dict[str, Any] | None, *, episode_id: int | None = None
+) -> None:
+    """落库工作流回传的 understanding：校验（含归属）后原样保存，下一轮原样回传。"""
+    episode.understanding = validate_understanding(blob, episode_id=episode_id)

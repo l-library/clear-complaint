@@ -21,17 +21,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.account.models import Profile
-from app.agent import redflag
+from app.agent import crisis, redflag
 from app.agent.citation import Condition as CitationCondition
 from app.agent.citation import verify as verify_citations
-from app.agent.normalize import split_attribution
-from app.agent.vocab import known_terms
 from app.agent.vocab import resolve as vocab_resolve
 from app.common.clock import format_shanghai, now_shanghai
 from app.common.codes import ErrorCode
 from app.common.errors import BizException
 from app.db.session import get_session
-from app.episode import clarification, compose, platform
+from app.episode import compose, platform, v2
 from app.episode.models import (
     STATUS_CLARIFYING,
     STATUS_FAILED,
@@ -39,7 +37,6 @@ from app.episode.models import (
     STATUS_READY,
     STATUS_SAVED,
     Episode,
-    EpisodeAnswer,
     IdempotencyKey,
 )
 from app.reminder import models as reminder_models
@@ -192,101 +189,97 @@ async def create_episode(
         return existing, False
 
     profile = await _require_profile(session, user_id)
-    remainder, attribution = split_attribution(text, known_terms())
     hits = redflag.detect(text)
+    crisis_hits = crisis.detect(text)
 
     episode = Episode(
         user_id=user_id,
         status=STATUS_GENERATING,
         complaint_text=text,
         city_code=city,
-        normalized={
-            "symptom": compose.build_initial_normalized(text, attribution),
-            # 主诉里已写明的时间先填上，平台就不会把用户答过的再问一遍
-            **compose.build_initial_times(text, attribution),
-            "site": None,
-            "nature": None,
-            "associated": None,
-            "medications_text": None,
-        },
-        self_attribution=attribution,
+        # v2 不预填 normalized：理解归工作流，这里由响应输出回填（api-agentarts 16.3-v2）
+        normalized=None,
         env=_build_env(profile, city),
         profile_snapshot=compose.map_profile_snapshot(profile),
-        vitals_snapshot={},
-        clarify_state={"round": 0, "round_limit": compose.CLARIFY_ROUND_LIMIT, "skipped": False},
+        raw_answers=[],
+        understanding=None,
+        clarify_state={"asked_count": 0, "skipped": False, "questions": {}},
         gate=_initial_gate(hits),
         expires_at=now_shanghai() + timedelta(days=compose.EPISODE_RETENTION_DAYS),
     )
     if hits:
         episode.status = STATUS_READY
         episode.result = compose.red_flag_result()
+    elif crisis_hits:
+        _apply_crisis(episode, crisis_hits)
     session.add(episode)
     await session.commit()
-    if hits:
+    if hits or crisis_hits:
         await _archive_with_reminder(session, episode)
         await session.commit()
     await _register_idempotency(session, user_id, key, fingerprint, episode.id)
     return episode, True
 
 
-async def submit_clarify(
+async def submit_answer(
     session: AsyncSession,
     user_id: int,
     episode_id: int,
-    answers: list[dict[str, object]],
+    payload: dict[str, object],
     key: str,
 ) -> tuple[Episode, bool]:
+    """提交一条回答原文（issue #23 契约第 1、3 节）。
+
+    三种动作：answer / unknown / skip；结果后的主动补充用 question_id=None。
+    幂等指纹含本次原话；答案视为主诉原文的延伸，红旗与危机规则重查，
+    命中即短路，安全优先于追问。
+    """
     episode = await _load_owned(session, user_id, episode_id)
-    if episode.status != STATUS_CLARIFYING:
+    state = episode.clarify_state or {}
+    question_id = payload.get("question_id")
+    question_id = str(question_id) if isinstance(question_id, str) else None
+    action = str(payload.get("action", ""))
+    text = str(payload.get("text", "") or "").strip()
+
+    if action not in v2.ANSWER_ACTIONS:
+        raise BizException(ErrorCode.INVALID_PARAM, "answer.action 取值不合法")
+    if action == "answer" and not text:
+        raise BizException(ErrorCode.INVALID_PARAM, "回答原文不能为空")
+    if len(text) > v2.ANSWER_TEXT_MAX_CHARS:
+        raise BizException(ErrorCode.INVALID_PARAM, "回答原文超长")
+
+    if episode.status == STATUS_CLARIFYING:
+        pending = state.get("pending_question_id")
+        if not isinstance(pending, str) or question_id != pending:
+            raise BizException(ErrorCode.CLARIFY_FIELD_INVALID)
+    elif episode.status == STATUS_SAVED and episode.result is not None:
+        # 结果后主动补充：不带问题号，也不覆盖初始主诉（契约第 1 节）
+        if question_id is not None or action != "answer":
+            raise BizException(ErrorCode.EPISODE_STATE_NOT_ALLOWED)
+    else:
         raise BizException(ErrorCode.EPISODE_STATE_NOT_ALLOWED)
 
-    fingerprint = _fingerprint({"answers": answers})
+    fingerprint = _fingerprint({"question_id": question_id, "action": action, "text": text})
     existing = await _resolve_idempotency(session, user_id, key, fingerprint)
     if existing is not None:
         return existing, False
 
-    state = episode.clarify_state or {}
-    question_fields = _string_list(state.get("question_fields"))
-    round_ = _int_or(state.get("round"), 0)
-    if round_ >= compose.CLARIFY_ROUND_LIMIT:
-        raise BizException(ErrorCode.CLARIFY_ROUNDS_EXHAUSTED)
-
-    normalized = dict(episode.normalized or {})
-    seen: set[str] = set()
-    for answer in answers:
-        field = str(answer.get("field", ""))
-        value = str(answer.get("value", ""))
-        is_unknown = bool(answer.get("is_unknown", False)) or clarification.is_unknown(value)
-        if field not in question_fields or field in seen:
-            raise BizException(ErrorCode.CLARIFY_FIELD_INVALID)
-        if not is_unknown and (not value.strip() or len(value) > 200):
-            raise BizException(ErrorCode.CLARIFY_FIELD_INVALID)
-        seen.add(field)
-        session.add(
-            EpisodeAnswer(
-                episode_id=episode.id,
-                round=round_,
-                field=field,
-                value=value.strip() or None,
-                is_unknown=is_unknown,
-            )
-        )
-        normalized[field] = compose.UNKNOWN_VALUE if is_unknown else value.strip()
-
-    episode.normalized = normalized
-    # 补充后重新执行红旗规则（16.3.4），答案视为主诉原文的延伸
+    v2.append_answer(episode, question_id, action, text)
     combined = (
         episode.complaint_text
         + "，"
-        + "，".join(str(normalized.get(field) or "") for field in seen)
+        + "；".join(str(row.get("text") or "") for row in (episode.raw_answers or []))
     )
     hits = redflag.detect(combined)
-    if hits:
+    crisis_hits = crisis.detect(combined)
+    if crisis_hits:
+        _apply_crisis(episode, crisis_hits)
+    elif hits:
         _apply_red_flag(episode, hits)
     else:
         episode.status = STATUS_GENERATING
     await session.commit()
-    if hits:
+    if crisis_hits or hits:
         await _archive_with_reminder(session, episode)
         await session.commit()
     await _register_idempotency(session, user_id, key, fingerprint, episode.id)
@@ -368,6 +361,37 @@ def _apply_red_flag(episode: Episode, hits: list[redflag.Hit]) -> None:
     gate = dict(episode.gate or {})
     gate["red_flags"] = [{"rule_id": hit.rule_id, "name": hit.name} for hit in hits]
     episode.gate = gate
+
+
+def _apply_crisis(episode: Episode, hits: list[crisis.CrisisHit]) -> None:
+    """危机命中：固定应对与复核标记，不进分诊、不调工作流（issue #23 第 6 节）。
+
+    result 保持空：这不是一次分诊完成，播报走 safety 事件而非 result_section。
+    """
+    episode.status = STATUS_READY
+    episode.result = None
+    gate = dict(episode.gate or {})
+    gate["crisis"] = crisis.disposition(hits)
+    episode.gate = gate
+
+
+def _normalized_public(payload: object) -> dict[str, object]:
+    """把理解输出的 normalized（平台字段名）折成公开展示字段名。
+
+    只做展示回填，不参与任何生成决策；symptom 平台侧是字符串，公开侧是列表。
+    """
+    if not isinstance(payload, dict):
+        return {}
+    values: dict[str, object] = {}
+    for platform_name, public_name in v2.PLATFORM_TO_PUBLIC.items():
+        value = payload.get(platform_name)
+        if platform_name == "symptom":
+            values["symptom"] = [value] if isinstance(value, str) and value else []
+        elif isinstance(value, str) and value:
+            values[public_name] = value
+        else:
+            values[public_name] = None
+    return values
 
 
 # ---- 事件流 ----
@@ -460,17 +484,28 @@ async def _replay(
 
     if episode.status == STATUS_CLARIFYING:
         state = episode.clarify_state or {}
+        pending = state.get("pending")
+        if not isinstance(pending, dict):
+            # 脏状态兜底：没有在等待回答的问题就当作生成中断处理
+            yield await _fail(
+                session,
+                episode,
+                int(ErrorCode.EPISODE_STATE_NOT_ALLOWED),
+                "问诊状态异常",
+                retryable=True,
+            )
+            return
         yield _stage(episode, "normalize", 10)
         yield _stage(episode, "clarify", 40)
         yield (
             "question",
             {
                 "episode_id": episode.id,
-                "round": state.get("round", 0),
-                "round_limit": state.get("round_limit", compose.CLARIFY_ROUND_LIMIT),
-                "missing_fields": state.get("missing_fields", []),
-                "unknown_fields": state.get("unknown_fields", []),
-                "questions": state.get("questions", []),
+                "question_id": pending.get("question_id"),
+                "purpose": pending.get("purpose"),
+                "text": pending.get("text"),
+                "can_skip": bool(pending.get("can_skip", True)),
+                "not_understood": False,
             },
         )
         return
@@ -499,7 +534,12 @@ async def _replay(
 async def _pipeline(
     session: AsyncSession, episode: Episode
 ) -> AsyncIterator[tuple[str, dict[str, object]]]:
-    """首发生成。红旗短路已在入库时定死（status=ready），这里只走模型路径。"""
+    """v2 首发生成与续答：原文进、理解出（api-agentarts 16.3-v2）。
+
+    每次调用带累计 answers 台账与上次 understanding；理解、选题、检索关键词
+    全在工作流侧。后端只管四件事：上下文组装、台账与计数、修订与迟到拒收、
+    输出复核（档位科室受控表、引用逐字核验、覆盖范围单向阀）。
+    """
     if episode.status in (STATUS_READY, STATUS_SAVED):
         async for event in _broadcast(episode):
             yield event
@@ -508,17 +548,39 @@ async def _pipeline(
     yield _stage(episode, "normalize", 10)
     yield _stage(episode, "retrieve", 30)
 
-    request = compose.build_platform_request(
+    state = episode.clarify_state or {}
+    asked = v2.asked_count(episode)
+    limit = v2.ask_limit_for(episode)
+    skipped = bool(state.get("skipped")) or asked >= limit
+    if asked >= limit and not state.get("skipped"):
+        # 到达周期上限：整体停止补问，让工作流按现有信息收尾，不硬停（契约第 5 节）
+        state = dict(episode.clarify_state or {})
+        state["skipped"] = True
+        episode.clarify_state = state
+        await session.commit()
+
+    history = await v2.build_history_context(
+        session, episode.user_id, now_shanghai(), exclude_episode_id=episode.id
+    )
+    gate = episode.gate or {}
+    request = v2.build_v2_request(
         episode_id=episode.id,
         request_id=f"ep{episode.id}-{uuid.uuid4().hex[:12]}",
         complaint_text=episode.complaint_text,
-        normalized_public=dict(episode.normalized or {}),
-        self_attribution=episode.self_attribution,
+        answers=list(episode.raw_answers or []),
+        understanding=episode.understanding,
+        history_context=history,
         profile_snapshot=dict(episode.profile_snapshot or {}),
-        clarify_state=dict(episode.clarify_state or {}),
-        red_flag_ids=[],
+        red_flag_ids=[
+            str(row.get("rule_id"))
+            for row in _mapping_list(gate.get("red_flags"))
+            if isinstance(row.get("rule_id"), str)
+        ],
+        asked_count=asked,
+        ask_limit=limit,
+        skipped=skipped,
+        base_revision=int(episode.revision or 0),
     )
-    # 走到这里说明红旗已查无命中；matched_rule_ids 恒空
     result: dict[str, object] = {}
     task = asyncio.create_task(platform.call_triage(request, platform.fresh_session_id()))
     try:
@@ -532,23 +594,116 @@ async def _pipeline(
         if not task.done():
             task.cancel()
 
+    async for event in _dispatch_v2(session, episode, result):
+        yield event
+
+
+async def _dispatch_v2(
+    session: AsyncSession, episode: Episode, result: dict[str, object]
+) -> AsyncIterator[tuple[str, dict[str, object]]]:
+    """按 workflow.v2 的状态分发。五状态映射见 docs/api.md 2.12。"""
     status = str(result.get("status", ""))
-    state = episode.clarify_state or {}
-    # io.5 起，insufficient_evidence 恒为空检索（missing_fields 必空、字段完整性
-    # 未评估），它不再携带可补问的缺项；只有 needs_clarification 表示还有字段可问
-    pending = clarification.pending_fields(result, episode.normalized or {})
-    can_clarify = (
-        not state.get("skipped") and _int_or(state.get("round"), 0) < compose.CLARIFY_ROUND_LIMIT
-    )
-    if pending and can_clarify and status == "needs_clarification":
-        async for event in _apply_clarification(session, episode, result):
+    echo_revision = result.get("base_revision")
+
+    if isinstance(echo_revision, int) and echo_revision != int(episode.revision or 0):
+        # 迟到结果：基于旧修订的响应不得覆盖新版本（契约第 1 节）。
+        # 丢弃本次响应，播当前已落库的结论。
+        logger.warning(
+            "平台回显修订不符，丢弃迟到结果 episode_id=%s echo=%s current=%s status=%s",
+            episode.id,
+            echo_revision,
+            episode.revision,
+            status,
+        )
+        async for event in _broadcast(episode):
             yield event
         return
+
+    # 理解输出回填：understanding 原样存，normalized 折成公开字段名供展示
+    understanding = result.get("understanding")
+    v2.store_understanding(
+        episode, understanding if isinstance(understanding, dict) else None, episode_id=episode.id
+    )
+    episode.normalized = _normalized_public(result.get("normalized"))
+    attributions = result.get("self_attribution")
+    if isinstance(attributions, list):
+        joined = "；".join(str(item) for item in attributions[:5] if str(item).strip())
+        episode.self_attribution = joined[:500] or None
+
+    raw_question = result.get("question")
+    question = raw_question if isinstance(raw_question, dict) else None
+    at_stop = bool((episode.clarify_state or {}).get("skipped")) or (
+        v2.asked_count(episode) >= v2.ask_limit_for(episode)
+    )
+
+    if status in ("needs_clarification", "not_understood") and question is not None:
+        if at_stop:
+            # 停止补问后仍发问：按结构不合规兜底（io.5 同款语义）
+            logger.warning("平台在停止补问后仍发问 episode_id=%s", episode.id)
+            yield _stage(episode, "compose", 95, compose.STAGE_TEXTS["degraded"])
+            async for event in _finalize_fallback(session, episode):
+                yield event
+            return
+        card: dict[str, object] = question
+        purpose = str(card.get("purpose", "other"))
+        text = str(card.get("text", ""))
+        can_skip = bool(card.get("can_skip", True))
+        if purpose not in v2.QUESTION_PURPOSES or not text.strip() or len(text) > 200:
+            logger.warning("问题卡片不合规 episode_id=%s purpose=%s", episode.id, purpose)
+            yield _stage(episode, "compose", 95, compose.STAGE_TEXTS["degraded"])
+            async for event in _finalize_fallback(session, episode):
+                yield event
+            return
+        question_id = v2.new_question_id(episode)
+        v2.register_question(episode, question_id, purpose, text, can_skip)
+        state = dict(episode.clarify_state or {})
+        state["pending_question_id"] = question_id
+        state["pending"] = {
+            "question_id": question_id,
+            "purpose": purpose,
+            "text": text,
+            "can_skip": can_skip,
+        }
+        episode.clarify_state = state
+        episode.status = STATUS_CLARIFYING
+        await session.commit()
+        yield _stage(episode, "clarify", 40)
+        yield (
+            "question",
+            {
+                "episode_id": episode.id,
+                "question_id": question_id,
+                "purpose": purpose,
+                "text": text,
+                "can_skip": can_skip,
+                "not_understood": status == "not_understood",
+            },
+        )
+        return
+
+    if status == "not_understood":
+        # 没听懂且无问可发：温和结束，不吐分诊模板
+        gate = dict(episode.gate or {})
+        gate["not_understood"] = True
+        episode.gate = gate
+        await _archive_with_reminder(session, episode)
+        await session.commit()
+        async for event in _broadcast_tail(episode):
+            yield event
+        return
+
     if status == "draft_ready":
         yield _stage(episode, "draft", 60)
         async for event in _apply_draft(session, episode, result):
             yield event
         return
+
+    if status == "out_of_coverage":
+        yield _stage(episode, "draft", 60)
+        async for event in _apply_coverage(session, episode, result):
+            yield event
+        return
+
     # failed / insufficient_evidence / 其它：保守兜底，不重试不追问。
     # retrieval 诊断（平台 16.3.4.x）只供排查：兜底原因记进日志与 gate
     retrieval = result.get("retrieval") if isinstance(result.get("retrieval"), dict) else None
@@ -567,60 +722,28 @@ async def _pipeline(
         yield event
 
 
-async def _apply_clarification(
+async def _apply_coverage(
     session: AsyncSession, episode: Episode, result: dict[str, object]
 ) -> AsyncIterator[tuple[str, dict[str, object]]]:
-    fields = clarification.pending_fields(result, episode.normalized or {})
-    if not fields:
-        yield _stage(episode, "compose", 95, compose.STAGE_TEXTS["degraded"])
-        async for event in _finalize_fallback(session, episode):
-            yield event
-        return
-    round_ = _int_or((episode.clarify_state or {}).get("round"), 0) + 1
-    if round_ > compose.CLARIFY_ROUND_LIMIT:
-        # 平台超过轮次上限仍在追问：按结构不合规兜底
-        yield _stage(episode, "compose", 95, compose.STAGE_TEXTS["degraded"])
-        async for event in _finalize_fallback(session, episode):
-            yield event
-        return
+    """覆盖范围版（issue #23）：理解了、语料不含。
 
-    missing = [clarification.FIELDS[field] for field in fields]
-    fields = missing[:5]
-    unknown = [
-        field
-        for field, value in (episode.normalized or {}).items()
-        if isinstance(value, str) and clarification.is_unknown(value)
-    ]
-    state = dict(episode.clarify_state or {})
-    state.update(
-        {
-            "round": round_,
-            "round_limit": compose.CLARIFY_ROUND_LIMIT,
-            "question_fields": fields,
-            "missing_fields": missing,
-            "unknown_fields": unknown,
-            "questions": compose.compose_questions(fields),
-        }
+    档位与科室保留、conditions 整节空、单向阀把无依据的 self_observe 抬到
+    clinic；emergency 保留。不装作有依据，也不伪装成 degraded。
+    """
+    raw_draft = result.get("draft")
+    draft: dict[str, object] = raw_draft if isinstance(raw_draft, dict) else {}
+    composed = compose.coverage_result(
+        triage=str(draft.get("triage", "")),
+        department_primary=str(draft.get("department_primary", "") or ""),
+        department_secondary=_optional_str(draft.get("department_secondary")),
     )
-    episode.clarify_state = state
-    episode.status = STATUS_CLARIFYING
     gate = dict(episode.gate or {})
-    gate["clarify_rounds"] = round_
-    episode.gate = gate
+    gate.update({"degraded": False, "fallback": False, "out_of_coverage": True})
+    v2.supersede_result(episode, composed, gate)
+    await _archive_with_reminder(session, episode)
     await session.commit()
-
-    yield _stage(episode, "clarify", 40)
-    yield (
-        "question",
-        {
-            "episode_id": episode.id,
-            "round": round_,
-            "round_limit": compose.CLARIFY_ROUND_LIMIT,
-            "missing_fields": missing,
-            "unknown_fields": unknown,
-            "questions": state["questions"],
-        },
-    )
+    async for event in _broadcast_tail(episode):
+        yield event
 
 
 def _as_index(value: object) -> int:
@@ -731,7 +854,6 @@ async def _apply_draft(
         return
 
     yield _stage(episode, "gate", 80)
-    episode.result = composed
     gate = dict(episode.gate or {})
     gate.update(
         {
@@ -741,7 +863,8 @@ async def _apply_draft(
             "fallback": False,
         }
     )
-    episode.gate = gate
+    # 修订机制：首版结果 revision=0，此后每接受一版 +1，旧版本进回看历史
+    v2.supersede_result(episode, composed, gate)
     await _archive_with_reminder(session, episode)
     await session.commit()
     async for event in _broadcast_tail(episode):
@@ -767,9 +890,9 @@ async def _broadcast(
 ) -> AsyncIterator[tuple[str, dict[str, object]]]:
     """把已落库结论按流播出：红旗短路与幂等重放共用。"""
     gate = episode.gate or {}
-    red_flaged = bool(gate.get("red_flags"))
+    short_circuited = bool(gate.get("red_flags")) or bool(gate.get("crisis"))
     yield _stage(episode, "normalize", 10)
-    if not red_flaged:
+    if not short_circuited:
         yield _stage(episode, "retrieve", 30)
         yield _stage(episode, "draft", 60)
     yield _stage(episode, "gate", 80)
@@ -780,7 +903,52 @@ async def _broadcast(
 async def _broadcast_tail(
     episode: Episode,
 ) -> AsyncIterator[tuple[str, dict[str, object]]]:
+    gate = episode.gate or {}
+    crisis_payload = gate.get("crisis")
+    if isinstance(crisis_payload, dict):
+        # 危机命中：固定应对走 safety 事件，不发任何分诊段落
+        yield ("safety", {"episode_id": episode.id, **crisis_payload})
+        yield (
+            "done",
+            {
+                "episode_id": episode.id,
+                "triage": None,
+                "conditions_count": 0,
+                "gate": _gate_public(gate),
+                "degraded": False,
+            },
+        )
+        return
+    if episode.result is None and gate.get("not_understood"):
+        yield (
+            "notice",
+            {
+                "episode_id": episode.id,
+                "kind": "not_understood",
+                "text": compose.NOT_UNDERSTOOD_NOTICE,
+            },
+        )
+        yield (
+            "done",
+            {
+                "episode_id": episode.id,
+                "triage": None,
+                "conditions_count": 0,
+                "gate": _gate_public(gate),
+                "degraded": False,
+            },
+        )
+        return
     result = episode.result or {}
+    if result.get("out_of_coverage"):
+        yield (
+            "notice",
+            {
+                "episode_id": episode.id,
+                "kind": "out_of_coverage",
+                "text": compose.COVERAGE_NOTE,
+            },
+        )
     items = _citation_items(episode)
     if items:
         yield ("citation", {"episode_id": episode.id, "items": items})
@@ -863,6 +1031,11 @@ def _gate_public(gate: dict[str, object]) -> dict[str, object]:
         "fallback": gate.get("fallback", False),
         # 平台 16.3.4.x 的检索诊断：只在兜底出现，值原样透传，供排查兜底原因
         "retrieval": gate.get("retrieval"),
+        # 危机处置载荷与没听懂标记：前端据此渲染对应卡片
+        "crisis": gate.get("crisis"),
+        "not_understood": gate.get("not_understood", False),
+        # 覆盖范围版标记（issue #23 三出口之二）
+        "out_of_coverage": gate.get("out_of_coverage", False),
     }
 
 
@@ -922,11 +1095,10 @@ async def episode_detail(session: AsyncSession, user_id: int, episode_id: int) -
     clarify = None
     if episode.status == STATUS_CLARIFYING:
         clarify = {
-            "round": state.get("round", 0),
-            "round_limit": state.get("round_limit", compose.CLARIFY_ROUND_LIMIT),
-            "missing_fields": state.get("missing_fields", []),
-            "unknown_fields": state.get("unknown_fields", []),
-            "questions": state.get("questions", []),
+            "asked_count": state.get("asked_count", 0),
+            "limit": v2.ask_limit_for(episode),
+            "skipped": bool(state.get("skipped", False)),
+            "pending": state.get("pending"),
         }
     return {
         "episode": {
@@ -936,6 +1108,7 @@ async def episode_detail(session: AsyncSession, user_id: int, episode_id: int) -
             "saved_at": format_shanghai(episode.saved_at) if episode.saved_at else None,
             "expires_at": format_shanghai(episode.expires_at),
             "complaint_text": episode.complaint_text,
+            "revision": int(episode.revision or 0),
         },
         "normalized": episode.normalized or {},
         "self_attribution": episode.self_attribution,
@@ -946,6 +1119,7 @@ async def episode_detail(session: AsyncSession, user_id: int, episode_id: int) -
         "qa_turns": [],
         "profile_snapshot": episode.profile_snapshot or {},
         "vitals_snapshot": episode.vitals_snapshot or {},
+        "result_history": episode.result_history or [],
         "disclaimer": compose.DISCLAIMER,
     }
 
@@ -1041,5 +1215,5 @@ __all__ = [
     "saved_symptom_texts",
     "saved_triage_points",
     "skip_clarify",
-    "submit_clarify",
+    "submit_answer",
 ]

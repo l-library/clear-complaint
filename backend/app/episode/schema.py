@@ -1,6 +1,6 @@
 """问诊域的请求与响应模型，字段与命名照 docs/api.md 第 2、5 节。"""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class CreateEpisodeRequest(BaseModel):
@@ -8,14 +8,12 @@ class CreateEpisodeRequest(BaseModel):
     city_code: str | None = None
 
 
-class ClarifyAnswer(BaseModel):
-    field: str
-    value: str = ""
-    is_unknown: bool = False
+class AnswerRequest(BaseModel):
+    """一条回答原文（issue #23 契约第 3 节）：question_id 为 null 表示结果后主动补充。"""
 
-
-class ClarifyRequest(BaseModel):
-    answers: list[ClarifyAnswer] = Field(min_length=1, max_length=5)
+    question_id: str | None = None
+    action: str
+    text: str = ""
 
 
 class EpisodeSummary(BaseModel):
@@ -37,6 +35,7 @@ class EpisodeOut(BaseModel):
     saved_at: str | None
     expires_at: str
     complaint_text: str
+    revision: int = 0
 
 
 class EpisodeDetail(BaseModel):
@@ -50,6 +49,8 @@ class EpisodeDetail(BaseModel):
     qa_turns: list[dict[str, object]]
     profile_snapshot: dict[str, object]
     vitals_snapshot: dict[str, object]
+    # 结果修订历史（issue #23）：保留最近三版供回看
+    result_history: list[dict[str, object]] = []
     disclaimer: str
 
 

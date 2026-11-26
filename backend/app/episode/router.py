@@ -67,19 +67,25 @@ async def create_episode(
 
 
 @router.post("/episodes/{episode_id}/clarify")
-async def clarify_episode(
+async def answer_episode(
     episode_id: int,
-    payload: schema.ClarifyRequest,
+    payload: schema.AnswerRequest,
     session: SessionDep,
     user: CurrentUser,
     idempotency_key: KeyHeader,
 ) -> StreamingResponse:
     key = service.parse_idempotency_key(idempotency_key)
-    answers = [
-        {"field": answer.field, "value": answer.value, "is_unknown": answer.is_unknown}
-        for answer in payload.answers
-    ]
-    episode, fresh = await service.submit_clarify(session, user.id, episode_id, answers, key)
+    episode, fresh = await service.submit_answer(
+        session,
+        user.id,
+        episode_id,
+        {
+            "question_id": payload.question_id,
+            "action": payload.action,
+            "text": payload.text,
+        },
+        key,
+    )
     return _episode_stream(session, (episode, fresh))
 
 
