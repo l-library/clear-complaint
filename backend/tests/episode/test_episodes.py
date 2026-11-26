@@ -312,9 +312,9 @@ def test_draft_ready_streams_full_result(
     assert detail["episode"]["status"] == "saved"
     assert detail["gate"]["citations_verified"] == 1
     assert detail["profile_snapshot"]["sex"] == "female"
-    # v2：normalized 是理解输出的回填（平台字段名折成公开字段名，symptom 为列表）
+    # v2：normalized 是理解输出的回填；首版结果即 revision=1（平台口径）
     assert detail["normalized"]["symptom"] == ["发热"]
-    assert detail["episode"]["revision"] == 0
+    assert detail["episode"]["revision"] == 1
 
 
 def test_platform_unavailable_falls_back(
@@ -635,7 +635,7 @@ def test_answer_requires_valid_state(
     ) as stream:
         stream.read()
     assert fake.calls[1]["answers"][-1]["question_id"] is None
-    assert fake.calls[1]["base_revision"] == 0
+    assert fake.calls[1]["base_revision"] == 1
 
 
 # ---- 重试 ----
@@ -974,9 +974,9 @@ def test_supplement_after_result_creates_revision(
     monkeypatch.setattr(platform, "call_triage", fake)
     _post_episode(db_client, user, complaint="合成测试：发热", key=_KEY)
     detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
-    assert detail["episode"]["revision"] == 0
+    assert detail["episode"]["revision"] == 1
 
-    # 结果后主动补充：question_id=null，基于当前修订（base_revision=0）
+    # 结果后主动补充：question_id=null，基于当前修订（base_revision=1）
     with db_client.stream(
         "POST",
         "/api/episodes/1/clarify",
@@ -987,11 +987,11 @@ def test_supplement_after_result_creates_revision(
     events = _parse_events(body)
     assert events[-1][0] == "done"
 
-    assert fake.calls[1]["base_revision"] == 0
+    assert fake.calls[1]["base_revision"] == 1
     detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
     # 旧版本保留为可回看历史，saved_at 不随修订重置
-    assert detail["episode"]["revision"] == 1
-    assert detail["result_history"][0]["revision"] == 0
+    assert detail["episode"]["revision"] == 2
+    assert detail["result_history"][0]["revision"] == 1
     assert detail["result_history"][0]["result"]["triage"] == "clinic"
 
 
@@ -999,7 +999,7 @@ def test_stale_revision_result_is_discarded(
     db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     late = _draft_ready(triage="self_observe", department="全科医学科")
-    late["base_revision"] = -1  # 基于旧修订的迟到结果
+    late["base_revision"] = 0  # 基于旧基线（尚无结果）的迟到结果
     fake = Platform([_draft_ready(triage="clinic", department="呼吸内科"), late])
     monkeypatch.setattr(platform, "call_triage", fake)
     _post_episode(db_client, user, complaint="合成测试：发热", key=_KEY)
@@ -1017,7 +1017,7 @@ def test_stale_revision_result_is_discarded(
     done = dict(events[-1][1])
     assert done["triage"] == "clinic"
     detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
-    assert detail["episode"]["revision"] == 0
+    assert detail["episode"]["revision"] == 1
     assert detail["result"]["triage"] == "clinic"
 
 

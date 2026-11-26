@@ -270,8 +270,10 @@ def ask_limit_for(episode: Episode) -> int:
 def supersede_result(episode: Episode, new_result: dict[str, Any], new_gate: dict[str, Any]) -> int:
     """接受一版新结果：旧版本进回看历史（cap 3），修订号推进。
 
-    首版结果 revision 保持 0；此后每接受一版 +1。归档时间与提醒不随修订
-    重置（#28 语义），由调用方保证，这里只管结果版本。
+    编号口径与平台对齐（api-agentarts 16.3-v2，实测确认）：首版结果即
+    revision=1，base_revision=0 表示尚无结果——补充请求若带 0 会被平台按
+    「无结果基线」拒绝。归档时间与提醒不随修订重置（#28 语义），由调用方
+    保证，这里只管结果版本。
     """
     if episode.result is not None:
         history: list[dict[str, Any]] = list(episode.result_history or [])
@@ -284,7 +286,7 @@ def supersede_result(episode: Episode, new_result: dict[str, Any], new_gate: dic
             }
         )
         episode.result_history = history[-RESULT_HISTORY_CAP:]
-        episode.revision = int(episode.revision or 0) + 1
+    episode.revision = int(episode.revision or 0) + 1
     episode.result = new_result
     episode.gate = new_gate
     return int(episode.revision or 0)

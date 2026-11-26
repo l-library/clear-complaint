@@ -299,36 +299,37 @@ def test_ask_limit_switches_by_period() -> None:
 def test_result_supersede_history_cap_and_revisions() -> None:
     episode = _blank_episode()
     first = v2.supersede_result(episode, {"triage": "clinic", "mark": 0}, {"degraded": False})
-    assert first == 0 and not episode.result_history
+    # 平台口径：首版结果即 revision=1；base_revision=0 表示尚无结果
+    assert first == 1 and not episode.result_history
 
     second = v2.supersede_result(episode, {"triage": "clinic", "mark": 1}, {"degraded": False})
-    assert second == 1
+    assert second == 2
     assert episode.result_history == [
         {
-            "revision": 0,
+            "revision": 1,
             "result": {"triage": "clinic", "mark": 0},
             "gate": {"degraded": False},
             "saved_at": None,
         }
     ]
 
-    for mark in range(2, 6):
+    for mark in range(2, 7):
         v2.supersede_result(episode, {"triage": "clinic", "mark": mark}, {"degraded": False})
     # 只保留最近三版，最旧的被挤掉
     assert len(episode.result_history) == v2.RESULT_HISTORY_CAP
-    assert [item["revision"] for item in episode.result_history] == [2, 3, 4]
-    assert episode.revision == 5
-    assert episode.result == {"triage": "clinic", "mark": 5}
+    assert [item["revision"] for item in episode.result_history] == [4, 5, 6]
+    assert episode.revision == 7
+    assert episode.result == {"triage": "clinic", "mark": 6}
 
 
 def test_stale_revision_rejects_late_results() -> None:
     episode = _blank_episode()
     v2.supersede_result(episode, {"triage": "clinic"}, {})
     v2.supersede_result(episode, {"triage": "clinic"}, {})
-    assert episode.revision == 1
-    assert not v2.is_stale_revision(episode, 1)
-    # 基于 0 版的迟到结果：当前已是 1 版，拒收
-    assert v2.is_stale_revision(episode, 0)
+    assert episode.revision == 2
+    assert not v2.is_stale_revision(episode, 2)
+    # 基于 1 版的迟到结果：当前已是 2 版，拒收
+    assert v2.is_stale_revision(episode, 1)
 
 
 def test_store_understanding_roundtrip_guard() -> None:
