@@ -9,7 +9,7 @@
 
 ## 本次交接变更（2026-11-24）
 
-- **Triage 修订已由平台发布为 `2026-11-24.mainflow-io.5`，Profile 与 Followup 同批升至 `.2`，Daily 升至 `.2`**（均经发布 URL 实测，见 16.1 与 16.3.4.1）；本地导出补丁工具 `tools/patch_triage_workflow.py` 已退役删除。Daily 协议保留，尚未接入本地业务层。
+- **Triage 已切换到 `Triage-Workflow-IO6-RouteSafe`（`2026-11-26.mainflow-io.6`，request.v2 / workflow.v2）：原文进、理解出，见 16.3-v2**。后端预提取与追问模板随之退役；Profile 与 Followup 维持 `.2`，Daily 协议保留尚未接入。新运行时 Key 截至 2026-11-26 尚未通过 HTTP 验收（401，见 issue #23），联调窗口待平台侧激活。
 - Triage 保留原运行时 URL。截图显示控制台“已提交／保存于 2026-11-24 10:47:51”，但未显示最终 `workflow_version`，不能仅凭截图认定发布接口已运行修订版；按下方版本表核对实际终态。
 - 补齐数字／区间时长、第二轮补问用药以及 `missing_fields / unknown_fields / insufficient_evidence` 的判定约定，详见 16.3.4.1。
 - 截图中的 `query: 你好` 是平台通用示例。本项目统一传 `inputs.request_json` 字符串；调试框粘贴内层业务 JSON，不额外加引号。会话 ID 由后端生成，不能复用截图常量。
@@ -24,7 +24,7 @@
 
 | 工作流 | 请求 schema_version | 响应 schema_version | 本地交付 workflow_version |
 | --- | --- | --- | --- |
-| Triage-Workflow-MainFlow | `clear-complaint.triage.request.v1` | `clear-complaint.triage.workflow.v1` | `2026-11-24.mainflow-io.5` |
+| Triage-Workflow-IO6-RouteSafe | `clear-complaint.triage.request.v2` | `clear-complaint.triage.workflow.v2` | `2026-11-26.mainflow-io.6` |
 | Profile-Intake-Workflow | `clear-complaint.profile-intake.request.v1` | `clear-complaint.profile-intake.workflow.v1` | `2026-11-24.profile-intake.2` |
 | Followup-Supplement-Workflow | `clear-complaint.followup-supplement.request.v1` | `clear-complaint.followup-supplement.workflow.v1` | `2026-11-24.followup-supplement.2` |
 | Daily-Health-Companion-Workflow | `clear-complaint.daily-companion.request.v1` | `clear-complaint.daily-companion.workflow.v1` | `2026-11-24.daily-companion.2` |
@@ -250,7 +250,10 @@ async def invoke_workflow(
 - 返回值仍需后端检查已部署版本、业务ID、内部状态、受控目录、引用和最终模板。不能因为函数返回对象就直接进入 `ready`，也不能把对象直接返回患者。
 - HTTP错误、平台错误、解析错误和总超时由调用方按16.6处理。Followup失败必须保留已计算的第一层建议，不能让随访主流程失败。
 
-### 16.3 Triage-Workflow-MainFlow
+### 16.3 Triage-Workflow-MainFlow（v1 契约基线，已被 16.3-v2 取代）
+
+> 本节保留为 v1/io.4–io.5 时期的联调记录与字段对照基线。现行契约为 16.3-v2
+> （`Triage-Workflow-IO6-RouteSafe`，request.v2 / workflow.v2），历史细节仅供核对。
 
 用途：后端完成归一化、固定字段澄清和红旗检查后，调用本工作流检索资料、生成结构化草稿并做本轮工程校验。前端继续使用第 5 节的业务接口，不直接调用平台。
 
@@ -451,6 +454,18 @@ async def invoke_workflow(
 同一次生成前的补充保持 `episode_id`，每次调用提交合并后的完整 `normalized/profile_snapshot/clarification` 快照，不只传一句“三天了”。原始主诉逐字保留，补充回答另行保存；明确更正由后端核对并更新，不能机械拼接矛盾值。
 
 工作流没有跨调用记忆，不返回旧版 `next_state_json`。后端负责身份归属、已答字段、问题轮次、请求幂等、当前状态、草稿、证据与核验记录的持久化和恢复。第 5.10 节结果页受限问答为待实现设计，约定只使用已核验引用及模板，不重新检索、不调用本工作流、不改定档；新症状需重新评估时走新问诊。
+
+### 16.3-v2 Triage-Workflow-IO6-RouteSafe（request.v2，原文进、理解出）
+
+来源：2026-11-26 平台交接《API 交接文档（仅变化）》与 issue #23 契约确认稿；联调用例包 16 组 23 景（`Triage-io6-回归用例包`）。要点：
+
+**请求差异（对 v1）**：`normalized` 七字段、`self_attribution`、`vitals_snapshot`、`env` 从输入删除，理解归工作流并由响应回填；新增 `answers`（累计原文台账，≤100 项、每项 text ≤4000 字符，`answer_id/question_id/action/text` 四项，主动补充 `question_id=null`）、`understanding`（上次响应原样回传，≤65536 序列化字符，自带 `episode_id` 时后端校验归属）、`history_context`（consultations ≤60 条每条 summary ≤800 字符 + medications ≤40 条 id/name/status，后端组装）、`base_revision`（可信修订基准，迟到结果拒收）；`clarification` 改为 `asked_count/limit/skipped`（初始周期 10 问、每修订周期 5 问，唯一问题计，unknown/skip 计入，重试不计数）。`profile_snapshot.sex` 接受 `male/female/other/unknown`，公开档案的 `undisclosed` 由后端适配为 `unknown`。`complaint_text` 平台侧放宽到 4000 字符（公开 API 保持 500）。未知顶层字段拒绝。
+
+**响应**：单问 `question`（`question_id=null` 由后端赋号，`purpose` ∈ onset/duration/location/character/associated_symptoms/medication/other）；状态 `needs_clarification / not_understood / out_of_coverage / draft_ready / insufficient_evidence / failed`；`normalized` 与 `self_attribution` 变为理解输出；`controlled_versions` + `controlled_hashes` 供后端核对冻结表——哈希口径为 `sha256(json.dumps(obj, ensure_ascii=False, separators=(",", ":")))`，与后端 `data/` 三表逐张匹配（2026-11-26 已验证零漂移）；`retrieval` 诊断新增 `not_called` 取值。
+
+**后端职责不变的部分**：红旗与危机规则在原文上确定性执行、永不咨询模型；引用逐字核验；档位枚举与科室受控表；`out_of_coverage` 的单向阀（无依据 `self_observe` 抬 `clinic`、`emergency` 保留、后端独立复核）；修订保留旧版本、`saved_at` 不重置、提醒去重、幂等含原话。
+
+**验收状态**：新运行时 Key（`agent-arts-5f50106a…`）截至 2026-11-26 实测 401，尚未联调；旧 Triage 凭证同日失效。回归用例 22 景待 Key 激活后在联调窗口逐项补实测记录。
 
 ### 16.4 Profile-Intake-Workflow
 
