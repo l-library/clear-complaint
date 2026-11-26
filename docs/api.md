@@ -71,7 +71,7 @@
 | 分诊档 `triage` | `emergency` 急诊 / `clinic` 门诊 / `self_observe` 自我观察 |
 | 科室 `department` | 急诊科、呼吸内科、消化内科、心血管内科、神经内科、感染科、皮肤科、儿科、全科医学科、肾内科、内分泌科、眼科、普通外科、骨科、急诊外科、肿瘤科、精神心理科（共 17 个，来自 `experiment/corpus/departments.json`） |
 | 性别 `sex` | `male` / `female` / `undisclosed` |
-| 问诊状态 `episode.status` | `clarifying` / `generating` / `ready` / `saved` / `failed` / `expired` |
+| 问诊状态 `episode.status` | `clarifying` / `generating` / `saved` / `failed` / `expired`（v2 完成即归档，`ready` 不再是持久状态） |
 | 体征类型 `vital.kind` | `height` / `weight` / `bp` |
 | 用药类型 `medication.kind` | `long_term` / `short_term` |
 | 用药状态 `medication.status` | `active` / `stopped` / `expired` |
@@ -241,11 +241,12 @@
 {
   "episode": {
     "id": 9001,
-    "status": "ready",
+    "status": "clarifying",
     "created_at": "2026-11-30 21:14:00",
     "saved_at": null,
     "expires_at": "2026-12-30 21:14:00",
-    "complaint_text": "这两天一直流鼻涕，嗓子有点干"
+    "complaint_text": "这两天一直流鼻涕，嗓子有点干",
+    "revision": 0
   },
   "normalized": {
     "symptom": ["流鼻涕", "咽干"],
@@ -257,9 +258,20 @@
     "medications_text": "没吃药"
   },
   "self_attribution": "可能是着凉了",
-  "env": { "city_name": "上海市", "weather": "多云 12℃", "fetched_at": "2026-11-30 21:14:02" },
-  "clarify": null,
+  "env": { "city_code": "310100", "city_name": "上海市", "weather": null, "fetched_at": "2026-11-30 21:14:02" },
+  "clarify": {
+    "asked_count": 1,
+    "limit": 10,
+    "skipped": false,
+    "pending": {
+      "question_id": "q1",
+      "purpose": "duration",
+      "text": "这次不舒服持续多久了？",
+      "can_skip": true
+    }
+  },
   "result": {},
+  "result_history": [],
   "gate": {},
   "qa_turns": [],
   "profile_snapshot": {},
@@ -268,8 +280,9 @@
 }
 ```
 
-- `clarify` 在 `status=clarifying` 时为当前轮问题对象，否则为 `null`。
-- `result` 在 `ready` 与 `saved` 时存在，其余状态为 `null`。
+- `clarify` 在 `status=clarifying` 时为待答单问对象（结构见 2.12），否则为 `null`。
+- `result` 在 `saved` 时存在；`result_history` 是被修订取代的旧版本（最近三版），`episode.revision` 为当前修订号（首版结果即 1）。
+- `normalized` 与 `self_attribution` 是工作流理解输出的回填：`symptom` 为列表，其余为文本或 `null`；不再有后端预提取。
 - `profile_snapshot` 与 `vitals_snapshot` 是生成时的事实快照，之后修改档案不影响它。
 - `env` 在取不到环境信息时为 `null`。
 - `qa_turns` 为该问诊的受限问答记录，按时间正序，结构见 2.14；只读。

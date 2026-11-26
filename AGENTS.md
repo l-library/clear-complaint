@@ -209,7 +209,7 @@ The table lists what we deliberately put off. Doing any of it means changing thi
 | Test database | Wired | `tests/conftest.py` rebuilds `clear_complaint_test` every session (env `TEST_DATABASE_URL`, default `localhost:5432`) and runs `alembic upgrade head`; the CI backend job carries `services: postgres` |
 | Redis | Not added | Do not add the dependency yet |
 | Record import (病历上传 / OCR) | Not built | No backend interface; the UI marker was removed. Land it after the object-storage row above is decided; no mock import |
-| Consult-side extras (连续追问, constraint detail, correction scoring, before/after comparison) | Not built | Roadmap from the workspace PR; the UI markers were removed and check-interactions guards the class. Each item lands as its own feature, no mock data |
+| Consult-side extras (constraint detail, correction scoring, before/after comparison) | Not built | 连续追问 (post-result supplement) landed with request.v2 in #29: the composer feeds the same episode and results are revised with capped lookback. The remaining three items stay on the roadmap, one PR each, no mock data |
 | Object storage (image upload) | Not chosen | Wait until there is a real upload need |
 | API docs and frontend type generation | Not wired | FastAPI ships OpenAPI; `openapi-typescript` is the candidate |
 | UI component library, UnoCSS, `sass` | Not added | Plain CSS for now |
