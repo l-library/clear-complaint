@@ -209,7 +209,7 @@ Closes #34.
 | 测试数据库 | 已接 | `tests/conftest.py` 每个会话重建 `clear_complaint_test`（环境变量 `TEST_DATABASE_URL`，默认 `localhost:5432`）并执行 `alembic upgrade head`；CI 的 backend job 带 `services: postgres` |
 | Redis | 未接入 | 先不加依赖 |
 | 病历上传 / OCR | 未做 | 后端无接口，界面标记已移除；等上面的对象存储行定案后再做，不做模拟导入 |
-| 问诊侧增强（连续追问、约束详情、纠偏评分、前后效果对比） | 未做 | 工作台 PR 的路线图项；界面标记已移除，check-interactions 有反向守护。逐项单独落地，不塞模拟数据 |
+| 问诊侧增强（约束详情、纠偏评分、前后效果对比） | 未做 | 连续追问已随 request.v2 在 #29 落地：结果后输入沿用同一问诊、结果按修订演进并保留回看。其余三项仍在路线图，逐项单独落地，不塞模拟数据 |
 | 对象存储（图片上传） | 未选型 | 等真有上传需求 |
 | 接口文档与前端类型生成 | 未接入 | FastAPI 自带 OpenAPI，`openapi-typescript` 是候选方案 |
 | UI 组件库、UnoCSS、`sass` | 未引入 | 样式用普通 CSS |
