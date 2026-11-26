@@ -835,6 +835,34 @@ async def _apply_draft(
         else:
             dropped += 1
 
+    if not kept and dropped:
+        # 约束四（handoff/constraints.md）：删空不出档，只看删除致空。候选被
+        # 删光后，档位与科室没有任何可核依据，不发布结论段落；平台本身没给
+        # 候选（conditions 从头为空，dropped=0）不在此列，维持既有出档路径。
+        # 与 out_of_coverage（保留档位）和平台不可用兜底（保留档位）互不相同。
+        logger.warning(
+            "引用闸门删空候选，不输出结论 episode_id=%s dropped=%s",
+            episode.id,
+            dropped,
+        )
+        gate = dict(episode.gate or {})
+        gate.update(
+            {
+                "citations_verified": 0,
+                "citations_dropped": dropped,
+                "degraded": False,
+                "fallback": False,
+                "no_conclusion": True,
+            }
+        )
+        episode.gate = gate
+        yield _stage(episode, "gate", 80)
+        await _archive_with_reminder(session, episode)
+        await session.commit()
+        async for event in _broadcast_tail(episode):
+            yield event
+        return
+
     composed = compose.compose_result(
         str(draft.get("triage", "")),
         str(draft.get("department_primary", "")),
@@ -926,6 +954,27 @@ async def _broadcast_tail(
                 "episode_id": episode.id,
                 "kind": "not_understood",
                 "text": compose.NOT_UNDERSTOOD_NOTICE,
+            },
+        )
+        yield (
+            "done",
+            {
+                "episode_id": episode.id,
+                "triage": None,
+                "conditions_count": 0,
+                "gate": _gate_public(gate),
+                "degraded": False,
+            },
+        )
+        return
+    if episode.result is None and gate.get("no_conclusion"):
+        # 删空不出档（约束四）：notice 给下一步指引，不发任何分诊段落
+        yield (
+            "notice",
+            {
+                "episode_id": episode.id,
+                "kind": "no_conclusion",
+                "text": compose.NO_CONCLUSION_NOTICE,
             },
         )
         yield (
@@ -1036,6 +1085,8 @@ def _gate_public(gate: dict[str, object]) -> dict[str, object]:
         "not_understood": gate.get("not_understood", False),
         # 覆盖范围版标记（issue #23 三出口之二）
         "out_of_coverage": gate.get("out_of_coverage", False),
+        # 删空不出档标记（约束四）：前端据此渲染对应卡片
+        "no_conclusion": gate.get("no_conclusion", False),
     }
 
 

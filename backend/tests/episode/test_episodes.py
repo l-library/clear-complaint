@@ -25,8 +25,8 @@ from app.common.clock import now_shanghai
 from app.common.codes import ErrorCode
 from app.common.errors import BizException
 from app.core.config import get_settings
+from app.episode import compose, platform, v2
 from app.episode import models as episode_models
-from app.episode import platform, v2
 from app.reminder import models as reminder_models
 
 _POOL_CONTENT = "以鼻塞、流涕、喷嚏、咽痛为主要表现，全身症状较轻。"
@@ -356,9 +356,10 @@ def test_invalid_draft_enum_falls_back(
     assert dict(events[-1][1])["degraded"] is True
 
 
-def test_unverified_citation_is_dropped(
+def test_unverified_citation_deletes_conclusion(
     db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """约束四：核不上的条目删除；仅剩的候选也被删光时不输出档位与科室。"""
     condition = {
         "name": "上呼吸道感染",
         "evidence": [
@@ -378,12 +379,27 @@ def test_unverified_citation_is_dropped(
     ) as stream:
         body = stream.read().decode()
     events = _parse_events(body)
+    names = _names(events)
     done = dict(events[-1][1])
 
+    # 删空不出档：done 不带档位，流里没有任何分诊段落
+    assert events[-1][0] == "done"
+    assert done["triage"] is None
     assert done["conditions_count"] == 0
+    assert done["degraded"] is False
+    assert done["gate"]["no_conclusion"] is True
+    assert "result_section" not in names
+    notices = [dict(event[1]) for event in events if event[0] == "notice"]
+    assert notices[-1]["kind"] == "no_conclusion"
+    assert notices[-1]["text"] == compose.NO_CONCLUSION_NOTICE
+
     detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
-    assert detail["result"]["conditions"] == []
-    assert detail["gate"]["citations_dropped"] >= 1
+    assert detail["result"] is None
+    assert detail["episode"]["status"] == "saved"
+    # 坏证据一条 + 删空的条件本身又记一次：单条件删空共记 2 次
+    assert detail["gate"]["citations_dropped"] == 2
+    assert detail["gate"]["citations_verified"] == 0
+    assert detail["gate"]["no_conclusion"] is True
 
 
 def test_unknown_condition_name_is_dropped(
@@ -402,9 +418,70 @@ def test_unknown_condition_name_is_dropped(
         "POST", "/api/episodes", json={"complaint": "流鼻涕三天了"}, headers=_sse_headers(user)
     ) as stream:
         body = stream.read().decode()
-    done = dict(_parse_events(body)[-1][1])
+    events = _parse_events(body)
+    done = dict(events[-1][1])
 
+    # 词表外的病名删除；删空同样不出档
     assert done["conditions_count"] == 0
+    assert done["triage"] is None
+    assert "result_section" not in _names(events)
+
+
+def test_all_conditions_deleted_publishes_no_conclusion(
+    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """B02-stop 复现：平台删光候选后仍回 draft_ready，后端不得出档。"""
+    bad_quote = {"evidence_idx": 0, "doc_title": "x", "section": "y", "quote": "编造的引文"}
+    conditions = [
+        {"name": "上呼吸道感染", "evidence": [dict(bad_quote)]},
+        {"name": "急性鼻窦炎", "evidence": [dict(bad_quote)]},
+    ]
+    fake = Platform([_draft_ready(conditions=conditions)])
+    monkeypatch.setattr(platform, "call_triage", fake)
+
+    with db_client.stream(
+        "POST", "/api/episodes", json={"complaint": "流鼻涕三天了"}, headers=_sse_headers(user)
+    ) as stream:
+        body = stream.read().decode()
+    events = _parse_events(body)
+    done = dict(events[-1][1])
+
+    assert done["triage"] is None
+    assert done["conditions_count"] == 0
+    assert done["gate"]["citations_dropped"] == 4
+    assert done["gate"]["no_conclusion"] is True
+
+
+def test_zero_candidate_draft_still_publishes_result(
+    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """删空不出档只看删除致空：平台没给候选（conditions 从头为空）维持出档。"""
+    fake = Platform([_draft_ready(conditions=[])])
+    monkeypatch.setattr(platform, "call_triage", fake)
+
+    with db_client.stream(
+        "POST", "/api/episodes", json={"complaint": "流鼻涕三天了"}, headers=_sse_headers(user)
+    ) as stream:
+        body = stream.read().decode()
+    events = _parse_events(body)
+    done = dict(events[-1][1])
+
+    assert done["triage"] == "clinic"
+    assert done["conditions_count"] == 0
+    assert done["degraded"] is False
+    assert done["gate"]["no_conclusion"] is False
+    assert done["gate"]["citations_dropped"] == 0
+    sections = {
+        event[1]["section"]: event[1]["payload"] for event in events if event[0] == "result_section"
+    }
+    assert sections["triage"]["triage_label"] == "门诊"
+    assert sections["department"]["department_primary"] == "呼吸内科"
+    assert sections["conditions"] == []
+
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["result"]["triage"] == "clinic"
+    assert detail["result"]["conditions"] == []
+    assert detail["gate"]["no_conclusion"] is False
 
 
 # ---- 追问 ----
