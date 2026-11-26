@@ -14,9 +14,9 @@
         <template v-if="hasGate">
           <view class="verification-row"><text>引用已核验</text><text>{{ gate?.citations_verified ?? '—' }}</text></view>
           <view class="verification-row"><text>引用已剔除</text><text>{{ gate?.citations_dropped ?? '—' }}</text></view>
-          <view class="verification-row"><text>补充轮次</text><text>{{ gate?.clarify_rounds ?? '—' }}</text></view>
           <view class="red-flag-list"><text class="live-muted">{{ gate?.red_flags?.length ? '命中的红旗规则' : '本次校验未记录红旗命中' }}</text><text v-for="flag in gate?.red_flags || []" :key="flag.rule_id" class="red-flag">{{ flag.name }}</text></view>
           <text v-if="gate?.fallback || gate?.degraded" class="live-notice">本次采用了保守降级处理。</text>
+          <text v-else-if="gate?.out_of_coverage" class="live-notice">资料库暂不覆盖此类表现，建议仅按紧急程度与科室参考。</text>
         </template>
         <text v-else class="live-muted">暂无校验记录。</text>
       </view>

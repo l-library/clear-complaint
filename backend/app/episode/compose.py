@@ -6,13 +6,10 @@
 
 from __future__ import annotations
 
-import re
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
 from app.agent.departments import contains as department_ok
-from app.agent.normalize import normalize
-from app.episode.clarification import canonical_duration
 
 if TYPE_CHECKING:
     from app.account.models import Profile
@@ -58,36 +55,44 @@ STAGE_TEXTS = {
     "degraded": "平台暂时不可用，已采用保守建议",
 }
 
-# 追问问题卡（constraints.md 约束二：按字段问，不做泛化提问）
-QUESTION_TEMPLATES: dict[str, dict[str, Any]] = {
-    "onset_at": {"text": "症状是从什么时候开始的？", "options": [], "allow_free_text": True},
-    "duration_text": {
-        "text": "这种情况持续了多久？",
-        # 平台工作流解析不了含阿拉伯数字的时长（实测 3天、1 周、1–3 天 全部
-        # insufficient_evidence，选了即兜底）。选项只用平台认可的中文数量词；
-        # 改动前先对平台实测，tests/episode/test_compose.py 有守护。
-        "options": ["半天", "一两天", "两三天", "一周", "一周以上"],
-        "allow_free_text": True,
-    },
-    "site": {"text": "不舒服的部位在哪里？", "options": [], "allow_free_text": True},
-    "nature": {
-        "text": "是什么样的感觉（比如胀痛、刺痛、清水样）？",
-        "options": [],
-        "allow_free_text": True,
-    },
-    "associated": {"text": "还有别的不舒服吗？", "options": [], "allow_free_text": True},
-    "medications_text": {
-        "text": "这次生病后用过什么药吗？",
-        "options": ["没用药"],
-        "allow_free_text": True,
-    },
-}
+# v2 起追问卡片由工作流选题、后端赋号转发（api-agentarts 16.3-v2），本地模板退役
 
-# 明确未知的编码：平台按 16.3.4 的口径不再把该字段当未答问题
-UNKNOWN_VALUE = "unknown"
-
-CLARIFY_ROUND_LIMIT = 5
 EPISODE_RETENTION_DAYS = 30
+
+
+COVERAGE_NOTE = "资料库暂不覆盖你描述的这类表现，以下仅按紧急程度与就诊科室作参考，不包含病因判断。"
+NOT_UNDERSTOOD_NOTICE = "这次没太听懂你的描述。可以换句话再说一遍，比如哪里不舒服、什么时候开始的。"
+
+
+def coverage_result(
+    triage: str,
+    department_primary: str,
+    department_secondary: str | None,
+) -> dict[str, Any]:
+    """覆盖范围版（issue #23 三出口之二）：理解了、语料不含。
+
+    档位与科室保留、conditions 整节空；单向阀把无依据的 self_observe 抬到
+    clinic，emergency 保留——无引用的判断只许往保守方向行使。
+    """
+    level = triage if triage in TRIAGE_LEVELS else "clinic"
+    if level == "self_observe":
+        level = "clinic"
+    primary = department_primary if department_ok(department_primary) else "全科医学科"
+    secondary = (
+        department_secondary
+        if department_secondary and department_ok(department_secondary)
+        else None
+    )
+    return {
+        "triage": level,
+        "triage_label": TRIAGE_LABELS[level],
+        "urgency_note": URGENCY_NOTES[level],
+        "department_primary": primary,
+        "department_secondary": secondary,
+        "conditions": [],
+        "prep": PREP_TEMPLATES[level],
+        "out_of_coverage": True,
+    }
 
 
 def fallback_result() -> dict[str, Any]:
@@ -133,108 +138,6 @@ def compose_result(
     }
 
 
-def compose_questions(fields: list[str]) -> list[dict[str, Any]]:
-    questions = []
-    for field in fields:
-        template = QUESTION_TEMPLATES[field]
-        questions.append(
-            {
-                "field": field,
-                "text": template["text"],
-                "options": list(template["options"]),
-                "allow_free_text": template["allow_free_text"],
-            }
-        )
-    return questions
-
-
-def build_platform_request(
-    *,
-    episode_id: int,
-    request_id: str,
-    complaint_text: str,
-    normalized_public: dict[str, Any],
-    self_attribution: str | None,
-    profile_snapshot: dict[str, Any],
-    clarify_state: dict[str, Any],
-    red_flag_ids: list[str],
-) -> dict[str, Any]:
-    """组装 16.3.1 的业务请求。normalized 字段名在这里完成公开→平台映射。"""
-    platform_normalized: dict[str, Any] = {
-        "symptom": " ".join(normalized_public.get("symptom") or []),
-        "onset": normalized_public.get("onset_at"),
-        "duration": canonical_duration(normalized_public.get("duration_text")),
-        "location": normalized_public.get("site"),
-        "character": normalized_public.get("nature"),
-        "associated_symptoms": normalized_public.get("associated"),
-        "medication": normalized_public.get("medications_text"),
-    }
-    return {
-        "schema_version": "clear-complaint.triage.request.v1",
-        "episode_id": str(episode_id),
-        "request_id": request_id,
-        "episode_status": "generating",
-        "complaint_text": complaint_text,
-        "normalized": platform_normalized,
-        "self_attribution": [self_attribution] if self_attribution else [],
-        "profile_snapshot": profile_snapshot,
-        "vitals_snapshot": {},
-        "env": {},
-        "clarification": {
-            "round": int(clarify_state.get("round", 0)),
-            "round_limit": CLARIFY_ROUND_LIMIT,
-            "skipped": bool(clarify_state.get("skipped", False)),
-        },
-        "red_flags": {"checked": True, "version": 1, "matched_rule_ids": red_flag_ids},
-    }
-
-
-# 首轮时间抽取。主诉里已写明病程（「发烧两天了」「持续三天」）或起点（「两天前
-# 开始」「昨天开始」）时填进首轮 normalized，平台就不会把用户答过的时间再问
-# 一遍。只认高置信句式：拿不准的留给追问，宁可多问一句也不错填一个字段，
-# 错的时间会顺着平台请求一路走到底。
-_NUMERAL = r"(?:半|[一二两三四五六七八九十]{1,2})"
-_UNIT = r"(?:天|日|周)"
-_DURATION_ONGOING_RE = re.compile(rf"({_NUMERAL})({_UNIT})了")
-_DURATION_SUSTAIN_RE = re.compile(rf"持续了?({_NUMERAL})({_UNIT})")
-_ONSET_RE = re.compile(rf"(?:{_NUMERAL}(?:天|日)前|(?:昨|前)天)(?:开始|起|出现)")
-
-
-def build_initial_times(complaint: str, attribution: str | None) -> dict[str, str | None]:
-    """从主诉提取高置信的起病时间与病程，供 create_episode 填入首轮 normalized。"""
-    text = complaint if attribution is None else _strip_attribution(complaint, attribution)
-    folded = normalize(text)
-    duration: str | None = None
-    for pattern in (_DURATION_SUSTAIN_RE, _DURATION_ONGOING_RE):
-        match = pattern.search(folded)
-        if match:
-            duration = match.group(1) + match.group(2)
-            break
-    onset_match = _ONSET_RE.search(folded)
-    return {
-        "onset_at": onset_match.group(0) if onset_match else None,
-        "duration_text": duration,
-    }
-
-
-# 平台的 symptom 检索吃不下温度数字：实测「发热最高385度咽痛和乏力」整句
-# NO_RETRIEVAL_EVIDENCE，剔除温度后同句两次 draft_ready。高热的定档走红旗
-# 规则，查的是原文，不依赖这里的 symptom。
-_DEGREE_RE = re.compile(r"(?:最高|高达|超过|烧到|到了|大约|大概|约)?\d+(?:[.．]?\d+)?(?:度|℃)")
-
-
-def build_initial_normalized(complaint: str, attribution: str | None) -> list[str]:
-    """初始归一化：摘掉自我归因后折整句为 symptom（字段级抽取不在本版）。"""
-    text = complaint if attribution is None else _strip_attribution(complaint, attribution)
-    folded = _DEGREE_RE.sub("", normalize(text))
-    return [folded] if folded else [complaint]
-
-
-def _strip_attribution(complaint: str, attribution: str) -> str:
-    remainder = complaint.replace(attribution, "")
-    return remainder.strip(" ，,。.；;") or complaint
-
-
 def map_profile_snapshot(profile: Profile) -> dict[str, Any]:
     """公开 Profile → 16.3.1 的 profile_snapshot。null/[] 的未知语义按契约编码。
 
@@ -249,7 +152,9 @@ def map_profile_snapshot(profile: Profile) -> dict[str, Any]:
         age -= 1
     return {
         "age": age,
-        "sex": profile.sex,
+        # v2 平台只认 male/female/other/unknown（api-agentarts 16.3-v2）；
+        # 公开档案保持 undisclosed 原值，这里只做出站适配
+        "sex": "unknown" if profile.sex == "undisclosed" else profile.sex,
         "conditions": list(conditions),
         "condition_note": profile.condition_note or "",
         "allergies": list(allergies),

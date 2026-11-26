@@ -27,27 +27,33 @@ export interface EpisodeResult {
   }
   disclaimer?: string
   degraded?: boolean
+  /** 覆盖范围版（issue #23 三出口之二）：conditions 整节空，科室档位仅作参考 */
+  out_of_coverage?: boolean
 }
 
-export interface QuestionField {
-  field: string
+/** 单问协议（io.6 / request.v2）：一次一问，question_id 由后端赋号 */
+export interface PendingQuestion {
+  question_id: string
+  purpose: string
   text: string
-  options?: string[]
-  allow_free_text?: boolean
+  can_skip: boolean
+  not_understood?: boolean
+}
+
+export type AnswerAction = 'answer' | 'unknown' | 'skip'
+
+/** 危机处置载荷：固定文案与求助渠道，无分诊段落（issue #23 第 6 节） */
+export interface SafetyPayload {
+  kind: 'crisis'
+  rule_ids: string[]
+  version: number
+  copy: string[]
 }
 
 export interface EpisodeDetail {
   disclaimer: string
   normalized?: Record<string, string | string[] | null>
   self_attribution?: string | null
-  gate?: {
-    red_flags?: Array<{ rule_id: string; name: string }>
-    citations_verified?: number
-    citations_dropped?: number
-    clarify_rounds?: number
-    degraded?: boolean
-    fallback?: boolean
-  } | null
   episode: {
     id: number
     status: string
@@ -55,14 +61,26 @@ export interface EpisodeDetail {
     saved_at: string | null
     expires_at: string
     complaint_text: string
+    revision?: number
   }
   result: EpisodeResult | null
   clarify: {
-    round: number
-    round_limit: number
-    missing_fields: string[]
-    unknown_fields?: string[]
-    questions: QuestionField[]
+    asked_count: number
+    limit: number
+    skipped: boolean
+    pending: PendingQuestion | null
+  } | null
+  /** 结果修订历史：保留最近三版供回看（issue #23） */
+  result_history?: Array<{ revision: number; result: EpisodeResult; gate: Record<string, unknown> | null }>
+  gate?: {
+    red_flags?: Array<{ rule_id: string; name: string }>
+    citations_verified?: number
+    citations_dropped?: number
+    degraded?: boolean
+    fallback?: boolean
+    out_of_coverage?: boolean
+    not_understood?: boolean
+    crisis?: SafetyPayload | null
   } | null
 }
 
@@ -91,7 +109,7 @@ export function listEpisodes(status?: string, page = 1, triage?: string): Promis
 }
 
 export interface EpisodeStreamEvent {
-  event: 'stage' | 'question' | 'citation' | 'result_section' | 'done' | 'error' | 'heartbeat'
+  event: 'stage' | 'question' | 'citation' | 'result_section' | 'done' | 'error' | 'heartbeat' | 'safety' | 'notice'
   data: Record<string, unknown>
 }
 
@@ -124,10 +142,10 @@ export function createEpisodeStream(
 
 export function clarifyEpisodeStream(
   episodeId: number,
-  answers: Array<{ field: string; value: string; is_unknown?: boolean }>,
+  answer: { question_id: string | null; action: AnswerAction; text: string },
   onEvent: (event: EpisodeStreamEvent) => void,
 ) {
-  return streamEpisode(`/episodes/${episodeId}/clarify`, { answers }, onEvent)
+  return streamEpisode(`/episodes/${episodeId}/clarify`, answer, onEvent)
 }
 
 export function skipClarifyStream(

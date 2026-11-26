@@ -23,12 +23,13 @@ from app.core.config import get_settings
 _REQUEST_SCHEMAS = {
     "profile": "clear-complaint.profile-intake.request.v1",
     "followup": "clear-complaint.followup-supplement.request.v1",
-    "triage": "clear-complaint.triage.request.v1",
+    # io.6（RouteSafe）：原文进、理解出，request.v2 / workflow.v2（api-agentarts 16.3-v2）
+    "triage": "clear-complaint.triage.request.v2",
 }
 _RESPONSE_SCHEMAS = {
     "profile": "clear-complaint.profile-intake.workflow.v1",
     "followup": "clear-complaint.followup-supplement.workflow.v1",
-    "triage": "clear-complaint.triage.workflow.v1",
+    "triage": "clear-complaint.triage.workflow.v2",
 }
 # 16.2.4 的超时表；总生成上限 60 秒是业务层的事，客户端只管单次调用
 _TIMEOUT_SECONDS = {"profile": 30.0, "followup": 8.0, "triage": 50.0}

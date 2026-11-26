@@ -39,6 +39,9 @@ def _auth(data: dict[str, Any]) -> dict[str, str]:
 def _draft_ready(triage: str, department: str) -> dict[str, Any]:
     return {
         "status": "draft_ready",
+        # v2：normalized 是理解输出，档案趋势的关键词统计从它取值
+        "normalized": {"symptom": "流涕咳嗽三天了"},
+        "self_attribution": [],
         "draft": {
             "triage": triage,
             "department_primary": department,

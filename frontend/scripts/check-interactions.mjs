@@ -120,13 +120,13 @@ assert.equal(events[0].data.text, '合成中文🗣️')
 assert.equal(events[1].data.episode_id, 71)
 assert.throws(() => parseModule.createSseParser(() => {}).push('event: done\ndata: invalid\n\n'), /格式/)
 const profile = { name: 'SYNTHETIC USER', birth_date: '2000-01-01', sex: 'undisclosed', city_code: null, age_years: 26, required_missing: [], conditions: null, allergies: null }
-const detail = { episode: { id: 71, status: 'ready', created_at: '2026-11-22 10:00:00', complaint_text: 'SYNTHETIC UI TEST', saved_at: null, expires_at: '2026-11-23 10:00:00' }, clarify: null, result: { triage: 'clinic', triage_label: '门诊', urgency_note: 'SYNTHETIC ONLY', department_primary: 'SYNTHETIC', department_secondary: null, conditions: [], prep: { bring: [], describe: [], go_now: [] }, disclaimer: 'SYNTHETIC ONLY' } }
+const detail = { episode: { id: 71, status: 'clarifying', created_at: '2026-11-22 10:00:00', complaint_text: 'SYNTHETIC UI TEST', saved_at: null, expires_at: '2026-11-23 10:00:00', revision: 0 }, clarify: { asked_count: 1, limit: 10, skipped: false, pending: { question_id: 'q1', purpose: 'duration', text: 'SYNTHETIC QUESTION', can_skip: true } }, result: { triage: 'clinic', triage_label: '门诊', urgency_note: 'SYNTHETIC ONLY', department_primary: 'SYNTHETIC', department_secondary: null, conditions: [], prep: { bring: [], describe: [], go_now: [] }, disclaimer: 'SYNTHETIC ONLY' } }
 const clone = (value) => JSON.parse(JSON.stringify(value))
 const settle = async () => { for (let i = 0; i < 16; i += 1) { await Promise.resolve(); await vue.nextTick() } }
 function setup(route = 'pages/index/index') {
   const auth = vue.reactive({ user: { id: 1 }, isLoggedIn: true, ensureFreshSession: async () => true })
   let failCreate = false, detailResolver, delayedDetail = false
-  const creations = [], routes = [], flights = []
+  const creations = [], routes = [], flights = [], answers = []
   let page = { route, options: {} }
   const episodes = {
     listEpisodes: async () => ({ records: [], total: 0, page: 1, size: 20 }),
@@ -134,10 +134,10 @@ function setup(route = 'pages/index/index') {
       creations.push({ complaint, key })
       if (failCreate) throw new Error('SYNTHETIC transport failure')
       event({ event: 'stage', data: { episode_id: 71, text: 'SYNTHETIC stage' } })
-      event({ event: 'done', data: { episode_id: 71 } })
+      event({ event: 'question', data: { episode_id: 71, question_id: 'q1', purpose: 'duration', text: 'SYNTHETIC QUESTION', can_skip: true } })
     },
     getEpisode: () => delayedDetail ? new Promise((resolve) => { detailResolver = resolve }) : Promise.resolve(clone(detail)),
-    clarifyEpisodeStream: async () => {}, skipClarifyStream: async () => {}, retryEpisodeStream: async () => {},
+    clarifyEpisodeStream: async (id, answer, event) => { answers.push({ id, answer }); event({ event: 'question', data: { episode_id: id, question_id: 'q2', purpose: 'duration', text: 'SYNTHETIC NEXT', can_skip: true } }) }, retryEpisodeStream: async () => {},
   }
   const uni = {
     ...baseUni,
@@ -156,7 +156,7 @@ function setup(route = 'pages/index/index') {
   if (route !== 'pages/index/index') store.openWorkspace('chat')
   const component = scope.run(() => modules('@/components/QWorkspace.vue').default.setup({}, { expose() {} }))
   component.messageTransition.value = { play: (...args) => flights.push(args) }
-  return { auth, store, component, creations, routes, flights, stop: () => scope.stop(), setFail: (value) => { failCreate = value }, delay: () => { delayedDetail = true }, resolve: () => detailResolver?.(clone(detail)) }
+  return { auth, store, component, creations, answers, routes, flights, stop: () => scope.stop(), setFail: (value) => { failCreate = value }, delay: () => { delayedDetail = true }, resolve: () => detailResolver?.(clone(detail)) }
 }
 for (const route of ['pages/index/index', 'pages/chat/index']) {
   const app = setup(route)
@@ -174,9 +174,21 @@ for (const route of ['pages/index/index', 'pages/chat/index']) {
   assert.match(app.routes[0], /^\/pages\/chat\/index\?conversation_id=71/)
   assert.equal(app.store.result.triage, 'clinic')
   assert.equal(app.store.messages.length, 1, 'No canned assistant messages may appear')
+  // 单问协议（issue #23）：一次一问，答案按动作原样提交
+  assert.equal(app.store.pendingQuestion?.question_id, 'q1', 'A single question must be pending after creation')
+  await app.store.submitAnswer('unknown')
+  assert.equal(app.store.messages.at(-1).content, '我不清楚')
+  assert.equal(app.answers.at(-1).answer.action, 'unknown')
+  assert.equal(JSON.stringify(app.answers.at(-1).answer), '{"question_id":"q1","action":"unknown","text":""}', 'The unknown action passes through verbatim')
   // 生成完成即自动归档（issue #24）：详情带 saved_at，没有任何保存请求要发
   app.store.detail.episode.saved_at = '2026-11-22 10:00:00'
   assert.equal(app.store.saved, true, 'A completed consult must read as archived')
+  // 结果后补充（修订）：问题答完（无挂起）时，sendMessage 沿用同一问诊
+  app.store.pendingQuestion = null
+  app.store.draft = '补充：还有点咳嗽'
+  await app.store.sendMessage()
+  await settle()
+  assert.equal(JSON.stringify(app.answers.at(-1).answer), '{"question_id":null,"action":"answer","text":"补充：还有点咳嗽"}', 'Post-result input supplements the same episode')
   app.component.goHome()
   await settle()
   assert.equal(app.store.screen, 'landing', 'Returning home must restore the separate landing page')

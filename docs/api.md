@@ -274,29 +274,54 @@
 - `env` 在取不到环境信息时为 `null`。
 - `qa_turns` 为该问诊的受限问答记录，按时间正序，结构见 2.14；只读。
 
-### 2.12 追问轮次对象
+### 2.12 单问协议与回答（io.6 / request.v2）
+
+问诊的补问改为一次一问，一条回答可以同时补充多项信息；理解归工作流，后端只管台账、计数与复核。
+
+`POST /api/episodes/{id}/clarify` 每次提交一条回答原文：
+
+```json
+{ "question_id": "q1", "action": "answer", "text": "三天了，主要是上腹部疼，没吃过药" }
+```
+
+| 字段 | 规则 |
+| --- | --- |
+| `question_id` | 必须对上当前待答问题；结果后的主动补充传 `null` |
+| `action` | `answer` / `unknown` / `skip`；`unknown` 与 `skip` 不转成「没有」，原文可空 |
+| `text` | 回答原文，不改写不折算，最多 500 字；`answer` 不允许空 |
+
+SSE `question` 事件（详情 `clarify.pending` 同构）：
 
 ```json
 {
-  "round": 1,
-  "round_limit": 5,
-  "missing_fields": ["duration_text", "nature"],
-  "questions": [
-    {
-      "field": "duration_text",
-      "text": "这种情况持续了多久？",
-      "options": ["半天", "一两天", "两三天", "一周", "一周以上"],
-      "allow_free_text": true
-    }
-  ]
+  "episode_id": 12,
+  "question_id": "q1",
+  "purpose": "duration",
+  "text": "这次不舒服持续多久了？",
+  "can_skip": true,
+  "not_understood": false
 }
 ```
 
-`field` 取值固定：`onset_at`、`duration_text`、`site`、`nature`、`associated`、`medications_text`。
+- `question_id` 由后端赋号、episode 内稳定；重复收到同一编号不重复展示、不重复计数
+- `purpose` 取值 `onset / duration / location / character / associated_symptoms / medication / other`
+- 提问按唯一问题计数：网络重试与重复事件不计数，一条回答补多项不加问数；`unknown` 与 `skip` 计入上限
+- 初始生成周期上限 10 问，每个结果修订周期 5 问；到上限不硬停，工作流按现有信息收尾
+- `POST /api/episodes/{id}/skip-clarify` 表示整体停止补问，与单题 `action=skip` 不同
 
-`missing_fields` 是尚未回答的公开字段名数组，`unknown_fields` 是明确未知的公开字段名数组，两者不重叠。`questions` 每轮最多 5 项；未容纳的缺项进入后续轮次，包含单独遗漏的 `medications_text`。明确“不清楚／不确定／跳过”等值统一记录为 `unknown`，不重复问，也不当作“没有”。SSE `question` 事件和问诊详情中的 `clarify` 同时返回 `unknown_fields`（无则为空数组）。
+**修订**：结果生成后继续补充（`question_id=null`）沿用同一 `episode_id`，结果按修订版本演进——`episode.revision` 首版为 0，每接受一版 +1；被取代的旧结果保留在 `result_history`（最近三版）供回看。`saved_at` 不随修订重置，提醒按 episode 与 pending 状态去重，幂等指纹包含本次原话，迟到旧结果按 `base_revision` 拒收。
 
-`duration_text` 接受“两天”“一周”“3天”“1 周”“1–3 天”等文本。原答案保留，传给平台时仅作等价数字与空格规范化，区间仍保持区间。时长格式不得直接触发 `insufficient_evidence`；后者仅表示检索无可用来源，字段状态与平台字段名转换详见 `api-agentarts.md` 16.3.4.1。
+**状态与出口**（工作流 status → 用户可见）：
+
+| 出口 | 表现 |
+| --- | --- |
+| 完整版 | 现有分诊卡 + 引用核验，不变 |
+| 覆盖范围版 | `gate.out_of_coverage=true`、`notice` 事件带边界声明、`conditions` 整节空；`self_observe` 一律抬到 `clinic`，`emergency` 保留 |
+| 没听懂 | `not_understood=true` 时 `question` 事件为温和澄清；无问可发时 `notice` 事件温和结束，不吐分诊模板 |
+| 空检索 / 平台故障 | 兜底 + `degraded` 标记（io.5 语义不变），`gate.retrieval` 带检索诊断 |
+| 危机文本 | `safety` 事件带固定应对与求助渠道，无分诊段落；后端确定性识别、不调工作流 |
+
+`normalized` 是理解输出的回填（展示用），不再是请求输入；平台契约与字段差异见 `api-agentarts.md` 16.3-v2。
 
 ### 2.13 随访补充清单（Supplement）
 
