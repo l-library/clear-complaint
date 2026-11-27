@@ -22,6 +22,10 @@
     {
       "path": "pages/health-plans/index",
       "style": { "navigationStyle": "custom", "navigationBarTitleText": "清诉 · 健康计划" }
+    },
+    {
+      "path": "pages/daily/index",
+      "style": { "navigationStyle": "custom", "navigationBarTitleText": "清诉 · 每日小结" }
     }
   ],
   "globalStyle": {

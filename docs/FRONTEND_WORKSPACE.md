@@ -10,6 +10,7 @@
 | AI 对话 | `/pages/chat/index` | `conversation_id`；随访使用 `reminder_id` 和 `date` |
 | 健康档案 | `/pages/health-records/index` | 无 |
 | 健康计划 | `/pages/health-plans/index` | `tab=all`、`tab=follow_up` 或 `tab=medication` |
+| 每日小结 | `/pages/daily/index` | 无 |
 
 H5 默认使用 hash 路由，例如 `/#/pages/health-plans/index`。页面共用 `QWorkspace.vue`，桌面保留左侧导航、聊天和右侧账户面板；手机使用底部导航，最近问诊从顶部时钟按钮打开。
 
@@ -23,6 +24,7 @@ H5 默认使用 hash 路由，例如 `/#/pages/health-plans/index`。页面共�
 
 - `stores/liveWorkspace.ts` 管理问诊、澄清、归档、历史记录和随访状态；`stores/auth.ts` 管理登录、刷新和退出。
 - `QLiveArchive.vue` 展示服务器返回的档案、问诊、体征和用药记录；`QLivePlans.vue` 管理服务器用药计划和提醒响应。
+- `QDailyReport.vue` 读取或生成当日小结（`POST /api/daily/generate`、`GET /api/daily`）。`data_source=mock` 始终显示「模拟数据演示」标记，`degraded=true` 显示「降级小结」标记；严格按业务码分支：5001 由用户点按生成，5002 与 5003 显示本地文案且不展示活动与明日安排，5004 直接说明输入未通过校验。`summary` 为 `null`（`review_required` 本地短路）时按待人工核实展示，不补写正文。
 - `QAccountPanel.vue` 接入账户、隐私授权、个人档案和数据导出；`QConsultationFlow.vue` 展示问诊与随访的实际服务响应。
 - 所有请求通过 `src/api/` 和 `src/request/`。H5 使用相对路径 `/api`，由开发服务器代理到后端；小程序使用 `VITE_API_BASE`。
 - 问诊通过 SSE 接收进度并读取最终结果；重试沿用幂等键，退出登录后丢弃迟到的会话响应。接口失败显示错误，不生成模拟回复或替代记录。
