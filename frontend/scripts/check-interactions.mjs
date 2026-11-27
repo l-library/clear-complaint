@@ -419,7 +419,7 @@ const dailyModules = loader({
   },
 })
 const DailyApiError = dailyModules('@/request').ApiError
-const dailyReport = { report_date: '2026-12-01', status: 'ready', degraded: false, data_source: 'mock', workflow_version: '2026-11-24.daily-companion.2', summary: { title: 'SYNTHETIC DAILY TITLE', greeting: 'SYNTHETIC GREETING', highlights: ['SYNTHETIC HIGHLIGHT'], health_connections: [], gentle_reminders: ['SYNTHETIC REMINDER'], tomorrow_actions: ['SYNTHETIC ACTION'], closing: 'SYNTHETIC CLOSING', limitations: 'SYNTHETIC LIMITATION' }, data_quality: { wear_minutes: 600 }, used_record_ids: ['ep12'], created_at: '2026-12-01 21:00:00', updated_at: '2026-12-01 21:00:00' }
+const dailyReport = { report_date: '2026-12-01', status: 'ready', degraded: false, data_source: 'mock', workflow_version: '2026-11-24.daily-companion.2', summary: { title: 'SYNTHETIC DAILY TITLE', greeting: 'SYNTHETIC GREETING', highlights: [{ id: 'metric:steps', label: 'SYNTHETIC LABEL', text: 'SYNTHETIC HIGHLIGHT', source_refs: ['watch_data.metrics.steps'] }], health_connections: [], gentle_reminders: [{ id: 'quality', label: 'SYNTHETIC REMINDER LABEL', text: 'SYNTHETIC REMINDER', source_refs: [] }], tomorrow_actions: [{ id: 'action:1', label: 'SYNTHETIC ACTION LABEL', text: 'SYNTHETIC ACTION', source_refs: [] }], closing: 'SYNTHETIC CLOSING', limitations: 'SYNTHETIC LIMITATION' }, data_quality: { wear_minutes: 600 }, used_record_ids: ['ep12'], created_at: '2026-12-01 21:00:00', updated_at: '2026-12-01 21:00:00' }
 const dailyScope = vue.effectScope()
 const daily = dailyScope.run(() => dailyModules('@/components/QDailyReport.vue').default.setup({}, { expose() {} }))
 dailyAction = async () => clone(dailyReport)
@@ -428,10 +428,14 @@ assert.equal(daily.state.value, 'ready')
 assert.equal(dailyCalls[0][0], 'get', 'The pane reads the current report on load')
 assert.deepEqual(Array.from(daily.badges.value, (badge) => badge.label), ['模拟数据演示'], 'A mock report must carry the visible demo badge')
 assert.deepEqual(Array.from(daily.blocks.value, (block) => block.key), ['highlights', 'gentle_reminders', 'tomorrow_actions'], 'Absent and empty blocks must not render')
+assert.deepEqual(daily.blocks.value[0].items, ['SYNTHETIC HIGHLIGHT'], 'Object-shaped summary items render their text')
 assert.equal(daily.heading.value, 'SYNTHETIC DAILY TITLE')
 assert.equal(daily.greeting.value, 'SYNTHETIC GREETING')
 assert.equal(daily.limitation.value, 'SYNTHETIC LIMITATION')
 assert.doesNotMatch(daily.meta.value, /2026-11-24\.daily-companion\.2/, 'Internal workflow versions must not be shown to users')
+dailyAction = async () => ({ ...clone(dailyReport), summary: { ...dailyReport.summary, highlights: ['LEGACY STRING HIGHLIGHT'] } })
+await daily.load()
+assert.deepEqual(daily.blocks.value[0].items, ['LEGACY STRING HIGHLIGHT'], 'Legacy string summary items remain compatible')
 dailyAction = async () => ({ ...clone(dailyReport), status: 'degraded', degraded: true, data_source: 'device' })
 await daily.load()
 assert.deepEqual(Array.from(daily.badges.value, (badge) => badge.label), ['降级小结'], 'A degraded report must show its own marker')

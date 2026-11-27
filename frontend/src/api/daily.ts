@@ -1,13 +1,22 @@
 import { request } from '@/request'
 
+export interface DailySummaryItem {
+  id?: string
+  label?: string
+  text?: string
+  source_refs?: string[]
+}
+
+export type DailySummaryContent = string | DailySummaryItem
+
 // 板块文案由工作流模板生成，后端只核对板块与日期：前端按可缺失处理，不补写。
 export interface DailySummary {
   title?: string
   greeting?: string
-  highlights?: string[]
-  health_connections?: string[]
-  gentle_reminders?: string[]
-  tomorrow_actions?: string[]
+  highlights?: DailySummaryContent[]
+  health_connections?: DailySummaryContent[]
+  gentle_reminders?: DailySummaryContent[]
+  tomorrow_actions?: DailySummaryContent[]
   closing?: string
   limitations?: string
 }
