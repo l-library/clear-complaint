@@ -11,6 +11,7 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -129,7 +130,11 @@ async def _seed_every_table(session: AsyncSession, user_id: int) -> dict[str, in
 
 
 def test_clear_data_empties_every_user_scoped_table(
-    db_client: TestClient, user: dict[str, Any], run_db: RunDb, counts: Counts
+    db_client: TestClient,
+    export_dir: Path,
+    user: dict[str, Any],
+    run_db: RunDb,
+    counts: Counts,
 ) -> None:
     tables = [table.name for table in _user_scoped_tables()]
     run_db(lambda session: _seed_every_table(session, user["user"]["id"]))
@@ -153,7 +158,11 @@ def test_clear_data_empties_every_user_scoped_table(
 
 
 def test_delete_account_empties_every_user_scoped_table_and_the_user(
-    db_client: TestClient, user: dict[str, Any], run_db: RunDb, counts: Counts
+    db_client: TestClient,
+    export_dir: Path,
+    user: dict[str, Any],
+    run_db: RunDb,
+    counts: Counts,
 ) -> None:
     tables = [table.name for table in _user_scoped_tables()]
     run_db(lambda session: _seed_every_table(session, user["user"]["id"]))

@@ -36,13 +36,6 @@ def _auth(data: dict[str, Any]) -> dict[str, str]:
     return {"Authorization": f"Bearer {data['tokens']['access_token']}"}
 
 
-@pytest.fixture
-def export_dir(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> Any:
-    directory = tmp_path / "exports"
-    monkeypatch.setattr(get_settings(), "export_dir", str(directory))
-    return directory
-
-
 def _seed_profile_and_vitals(db_client: TestClient, data: dict[str, Any]) -> None:
     response = db_client.put(
         "/api/profile",
