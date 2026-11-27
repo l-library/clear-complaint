@@ -14,8 +14,7 @@
 | `corpus/kb/` | 导出给平台知识库的文件集与 `kb_manifest.csv` | 是 |
 | `corpus/` | 指南片段、冻结向量、候选词表、科室表、红旗清单 | 是 |
 | `cases/` | 病例、五个变体、金标准、签核记录 | 是 |
-| `harness/` | 归一化、红旗、检索、引用与模板校验、模型客户端 | 是 |
-| `arms/` | 四个实验臂的提示词与开关快照 | 是 |
+| `harness/` | 归一化、红旗、检索、引用与模板校验、模型客户端，外加四个实验臂的提示词与开关（`arms.py`） | 是 |
 | `runs/` | 每次调用的原始响应与参数，只追加 | 是 |
 | `analysis/` | 指标、bootstrap、`figures/` | 是（图） |
 | `handoff/` | `constraints.md` 五条约束的规格与实测效应；`frozen_sample.jsonl` 100 条验收样本 | 是 |
@@ -24,7 +23,7 @@
 
 ## 当前状态
 
-语料是九个病种域、54 份文件、1470 条片段，检索池 555 条。域的口径是病种而非症状，理由见 [docs/stage1.md](../docs/stage1.md) 的「语料」一节。覆盖率实测在 `corpus/probe_ingested.md`。
+语料是九个病种域、54 份文件、1470 条片段，检索池 564 条（clinical 555 条 + triage 判据 9 条，见 `corpus/triage_pool.json`）。域的口径是病种而非症状，理由见 [docs/stage1.md](../docs/stage1.md) 的「语料」一节。覆盖率实测在 `corpus/probe_ingested.md`。
 
 两轮的实测结论：
 
