@@ -31,6 +31,13 @@
             <text>登录后可保存咨询记录</text>
             <view><QIcon name="shield" /><text>仅供健康信息整理</text></view>
           </view>
+          <button role="button" tabindex="0" @keydown="activateButton" class="landing-daily-card" @click="navigate('daily')">
+            <view class="landing-daily-copy">
+              <text class="landing-daily-title">每日小结</text>
+              <text class="landing-daily-detail">回看今天值得肯定的事，以及明天可以做的小事。</text>
+            </view>
+            <view class="landing-daily-action"><text>查看每日小结</text><QIcon name="arrow-right" /></view>
+          </button>
         </view>
       </view>
       <view class="landing-footer"><text>清诉</text><text>仅供健康信息整理</text></view>
@@ -107,7 +114,10 @@
                 </view>
               </scroll-view>
               <view class="conversation-composer">
-                <view class="conversation-tools"><text>{{ isFollowUp ? '提交后保存本次随访' : saved ? '问诊完成，已保存至健康档案，并按建议安排了提醒。' : '问诊完成后自动保存至健康档案。' }}</text></view>
+                <view class="conversation-tools">
+                  <text>{{ isFollowUp ? '提交后保存本次随访' : saved ? '问诊完成，已保存至健康档案，并按建议安排了提醒。' : '问诊完成后自动保存至健康档案。' }}</text>
+                  <button v-if="saved && !isFollowUp" role="button" tabindex="0" @keydown="activateButton" class="conversation-daily-link" @click="navigate('daily')">查看今日小结</button>
+                </view>
                 <view v-if="isCompletedFollowUp" class="completed-conversation"><QIcon name="check" /><text>本次随访已完成，记录已归档。出现新的不适可以新建问诊。</text><button role="button" tabindex="0" @keydown="activateButton" @click="requestNewConversation">新建问诊</button></view>
                 <QComposer v-else ref="replyComposer" v-model="draft" compact :context-label="isFollowUp ? '随访回复' : '问诊交流'" :placeholder="isFollowUp ? '随访补充说明…' : store.result ? '补充新情况，会更新这份建议…' : (store.pendingQuestion ? '回答上方的问题…' : '正在整理…')" :pending="pending" :error="error" @send="handleSend" @attach="navigate('archive')" />
                 <text class="medical-note">健康信息整理，不构成诊断。</text>
@@ -344,6 +354,13 @@ watch([messageCount, pending, activeTab, () => activeConversation.value?.id], as
 .composer-footnote { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-top: max(13px, calc(20 * var(--u))); font-size: clamp(11px, calc(14 * var(--u)), 16px); color: var(--muted); }
 .composer-footnote > view { display: flex; align-items: center; gap: 7px; }
 .composer-footnote .q-icon { width: 17px; height: 17px; opacity: .6; }
+.landing-daily-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; width: 100%; margin-top: max(14px, calc(20 * var(--u))); padding: max(16px, calc(22 * var(--u))) max(18px, calc(24 * var(--u))); border: 1px solid var(--line); border-radius: 18px; box-sizing: border-box; background: var(--surface); color: var(--ink); text-align: left; }
+.landing-daily-card:hover { background: var(--surface-soft); }
+.landing-daily-copy, .landing-daily-detail { display: block; }
+.landing-daily-title { font-size: clamp(14px, calc(18 * var(--u)), 18px); font-weight: 600; line-height: 1.5; }
+.landing-daily-detail { margin-top: 5px; color: var(--muted); font-size: clamp(11px, calc(14 * var(--u)), 14px); line-height: 1.7; }
+.landing-daily-action { display: flex; align-items: center; flex-shrink: 0; gap: 6px; color: var(--accent); font-size: clamp(11px, calc(14 * var(--u)), 14px); line-height: 1.5; }
+.landing-daily-action .q-icon { width: 16px; height: 16px; }
 .landing-footer { position: absolute; right: 5.8vw; bottom: 28px; left: 5.8vw; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
 .workspace-shell { display: flex; }
 .sidebar { position: fixed; z-index: 30; inset: 0 auto 0 0; width: max(60px, 4.65vw); display: flex; flex-direction: column; align-items: center; border-right: 1px solid var(--line); background: #fdfdf7; box-sizing: border-box; transition: width .22s ease, box-shadow .22s ease; }
@@ -426,7 +443,8 @@ watch([messageCount, pending, activeTab, () => activeConversation.value?.id], as
 .loading-dots text:nth-child(3) { animation-delay: .28s; }
 .message-end { height: 1px; }
 .conversation-composer { --composer-height: calc(173 * var(--u)); padding-top: 18px; flex-shrink: 0; }
-.conversation-tools { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-bottom: max(10px, calc(20 * var(--u))); font-size: clamp(11px, calc(16 * var(--u)), 18px); color: var(--muted); }
+.conversation-tools { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px 15px; margin-bottom: max(10px, calc(20 * var(--u))); font-size: clamp(11px, calc(16 * var(--u)), 18px); color: var(--muted); }
+.conversation-daily-link { display: inline-flex; align-items: center; flex-shrink: 0; min-height: 32px; margin: 0; padding: 5px 0; background: transparent; color: var(--accent); font-size: inherit; line-height: 1.5; }
 .context-column {
   --muted: #657064;
   --glass-surface: rgba(255, 255, 255, .42);
@@ -504,6 +522,8 @@ button:active { transform: scale(.97); }
   .intro-detail { margin-top: 16px; }
   .landing-composer { width: calc(100% - 40px); margin-top: 40px; --composer-height: 185px; }
   .composer-footnote { font-size: 10px; }
+  .landing-daily-card { gap: 12px; padding: 14px 16px; }
+  .landing-daily-action { gap: 3px; }
   .landing-footer { left: 22px; right: 22px; bottom: 22px; font-size: 10px; }
   .sidebar { display: none; }
   .chat-mobile-toolbar { display: flex; height: 60px; align-items: center; justify-content: space-between; gap: 10px; padding: 0 20px; }
@@ -532,6 +552,7 @@ button:active { transform: scale(.97); }
   .message-assistant .message-bubble { padding-left: 0; }
   .assistant-identity { margin-bottom: 10px; }
   .conversation-tools { font-size: 10px; }
+  .conversation-daily-link { min-height: 44px; padding: 0; }
   .save-button { font-size: 12px; }
   .context-column { max-height: none; }
 }

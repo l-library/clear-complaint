@@ -431,7 +431,7 @@ assert.deepEqual(Array.from(daily.blocks.value, (block) => block.key), ['highlig
 assert.equal(daily.heading.value, 'SYNTHETIC DAILY TITLE')
 assert.equal(daily.greeting.value, 'SYNTHETIC GREETING')
 assert.equal(daily.limitation.value, 'SYNTHETIC LIMITATION')
-assert.match(daily.meta.value, /2026-11-24\.daily-companion\.2/)
+assert.doesNotMatch(daily.meta.value, /2026-11-24\.daily-companion\.2/, 'Internal workflow versions must not be shown to users')
 dailyAction = async () => ({ ...clone(dailyReport), status: 'degraded', degraded: true, data_source: 'device' })
 await daily.load()
 assert.deepEqual(Array.from(daily.badges.value, (badge) => badge.label), ['降级小结'], 'A degraded report must show its own marker')
@@ -462,6 +462,17 @@ for (const [code, state, title] of [[5002, 'insufficient', '今天记录不足�
   assert.equal(daily.error.value, '', `Code ${code} must not surface the server message`)
   assert.equal(daily.blocks.value.length, 0)
 }
+dailyAction = async () => clone({ ...dailyReport, report_date: daily.yesterday })
+daily.selectDate(daily.yesterday)
+await settle()
+assert.equal(daily.selectedDate.value, daily.yesterday)
+assert.deepEqual(Array.from(dailyCalls.at(-1)), ['get', daily.yesterday], 'Switching to yesterday reads that date')
+assert.equal(daily.selectedDateLabel.value, '昨天')
+dailyAction = async () => { throw new DailyApiError(5001, 'SYNTHETIC MESSAGE') }
+await daily.load()
+assert.equal(daily.state.value, 'missing')
+assert.equal(daily.emptyState.value.title, '昨天还没有小结')
+assert.equal(daily.emptyState.value.action, null, 'Historical empty states must not offer today-only generation')
 dailyAction = async () => { throw new Error('SYNTHETIC DAILY TRANSPORT') }
 await daily.load()
 assert.equal(daily.state.value, 'error')
