@@ -852,7 +852,7 @@ data: {"episode_id":9001,"stage":"normalize","text":"正在理解你的描述","
 
 ### 11.3 `DELETE /api/data`
 
-请求 `{ "confirm": "删除" }`。清空档案、体征、用药、计划、问诊、引用、随访、提醒与事件记录，账号保留。响应 `{ "cleared": { "episodes": 3, "vitals": 5, "medications": 2, "reminders": 4 } }`。
+请求 `{ "confirm": "删除" }`。清空档案、体征、用药、计划、问诊、引用、随访、提醒、日报与事件记录，账号保留。响应 `{ "cleared": { "episodes": 3, "vitals": 5, "medications": 2, "reminders": 4 } }`。
 
 错误：3006 确认文本不匹配（HTTP 400）。
 
