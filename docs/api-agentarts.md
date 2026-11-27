@@ -1006,7 +1006,7 @@ DSL 模型节点配置 6 秒、重试 0 次，用于留出其他步骤时间，�
 
 #### 16.8.1 接入状态、地址与边界
 
-更新日期：2026-11-24。新增的第四条工作流，汇总当天手表记录并结合后端提供的健康档案，生成侧重理解、鼓励和温和提醒的每日小结。
+更新日期：2026-11-27（交接稿里「发布URL未验证」一项已完成，实测结论见16.8.9；2026-11-24 为协议初稿日期）。新增的第四条工作流，汇总当天手表记录并结合后端提供的健康档案，生成侧重理解、鼓励和温和提醒的每日小结。
 
 | 项目 | 当前约定 |
 | --- | --- |
@@ -1014,11 +1014,11 @@ DSL 模型节点配置 6 秒、重试 0 次，用于留出其他步骤时间，�
 | 运行时 | `agent-arts-fe15b614a68241f0b850005b9b325630` |
 | 请求 schema_version | `clear-complaint.daily-companion.request.v1` |
 | 响应 schema_version | `clear-complaint.daily-companion.workflow.v1` |
-| workflow_version | `2026-11-24.daily-companion.1` |
+| workflow_version | `2026-11-24.daily-companion.2`（2026-11-27 实测；交接稿记 `.1`） |
 | 开始节点业务输入 | `request_json`，String |
 | 原生 query | 不参与处理，可省略或留空 |
 | 附件记录的控制台验证 | 控制台合成样例返回 `status=ready`、`model_selection_applied=true` |
-| 本次未验证 | 使用截图密钥调用发布URL、真实HTTP响应和SSE终态；发布版本仍应核对 |
+| 发布URL验收 | 2026-11-27 已用真实 HTTP/SSE 调用 12 次，四种状态复现，版本、白名单与引用规则核对通过（见16.8.9）；交接时未做 |
 | 后端接入状态 | 本地 `backend/app/agent/client.py` 仍只有 profile/followup/triage 映射，daily 尚需登记 |
 | 独立记忆库输入 | 当前无 `user_memory` 接口，额外字段不会自动传给模型 |
 
@@ -1285,6 +1285,10 @@ payload = {
 下面复用16.2.4的**独立联调函数**，认证请求头由可信后端模块提供，示例正文不含鉴权值：
 
 ```python
+DAILY_WORKFLOW_VERSION = "2026-11-24.daily-companion.2"
+REPORT_STATUSES = {"ready", "degraded", "review_required", "data_insufficient"}
+
+
 async def call_daily(client, daily_request, runtime_headers, platform_session_id):
     result = await invoke_workflow(
         client=client,
@@ -1295,14 +1299,17 @@ async def call_daily(client, daily_request, runtime_headers, platform_session_id
         expected_schema="clear-complaint.daily-companion.workflow.v1",
         total_seconds=60,
     )
-    if result.get("workflow_version") != "2026-11-24.daily-companion.1":
+    if result.get("workflow_version") != DAILY_WORKFLOW_VERSION:
         raise ValueError("每日总结工作流版本不匹配")
-    if result.get("report_date") != daily_request.get("report_date"):
-        raise ValueError("每日总结日期不匹配")
-    if result.get("data_source") != daily_request.get("data_source"):
-        raise ValueError("模拟/真实数据来源不匹配")
+    if result.get("status") in REPORT_STATUSES:
+        if result.get("report_date") != daily_request.get("report_date"):
+            raise ValueError("每日总结日期不匹配")
+        if result.get("data_source") != daily_request.get("data_source"):
+            raise ValueError("模拟/真实数据来源不匹配")
     return result
 ```
+
+平台每次发布新 DSL 都会 bump `workflow_version`：交接稿是 `.1`，2026-11-27 实测已是 `.2`。上面那个常量只用来核对本次交付的版本，不是长期契约；更稳的做法是按16.8.8 第 6 条把 `workflow_version` 随每份报告落库，历史报告按行上的版本解读。回显校验只在报告状态下做，因为校验失败的响应会把 `data_source` 回成 `unknown`、`report_date` 回成空串（见16.8.7 末），照字面比会抛 `ValueError` 而把 `invalid_input` 盖掉。
 
 项目现有 `backend/app/agent/client.py` 的 `invoke_workflow` 采用工作流名称映射，签名与上面独立联调函数不同，不应直接覆盖它。落地时在Settings、URL/Key映射、请求/响应schema映射和超时表中增加 `daily`，再由业务层调用现有客户端。建议工程总预算60秒；不是临床或既有业务SLA承诺。
 
@@ -1323,7 +1330,7 @@ HTTP 200只表示HTTP层成功。模型节点的raw_output不是最终小结，�
 ```json
 {
   "schema_version": "clear-complaint.daily-companion.workflow.v1",
-  "workflow_version": "2026-11-24.daily-companion.1",
+  "workflow_version": "2026-11-24.daily-companion.2",
   "request_id": "SYNTHETIC-DAILY-TEST-001",
   "report_date": "2026-11-23",
   "data_source": "mock",
@@ -1499,13 +1506,15 @@ HTTP 200只表示HTTP层成功。模型节点的raw_output不是最终小结，�
 
 `source_refs` 是本协议内的逻辑溯源标识，例如 `health_archive.records.MEDICAL-001` 指向问诊/病历ID的统一来源索引，不是需要直接访问的URL或真实JSONPath。
 
+**校验失败路径的字段形状**（2026-11-27 实测）：`status=invalid_input` 时 16 个顶层键仍然齐全，其中 `report_date` 为 `""`、`data_source` 为 `"unknown"`、`summary` 为 `null`、`data_quality` 为 `{}`、`used_record_ids` 为 `[]`，`request_id` 照常回显。`unknown` 不在16.8.2 的请求取值里（只有 `mock`/`device`），它只出现在这条失败路径上，不是来源异常。后端响应校验要先看 `status`：回显与快照校验只对报告状态 `ready/degraded/review_required/data_insufficient` 执行，失败状态读 `error_code`；解析代码同时要接受 `summary=null` 与 `data_quality={}`，否则被拒的输入会被解析异常盖住。`request_id` 缺失时记日志即可，不要改成「关联不匹配」的硬失败。
+
 #### 16.8.8 状态、失败与保存策略
 
 | status | 处理方式 |
 | --- | --- |
 | `ready` | 模型选择合法，经模板生成小结；后端复核后可展示/保存 |
 | `degraded` | 模型正文空、格式错误或候选ID不合规，已返回可追溯的模板兜底；允许以降级标记展示，不要无限重试 |
-| `data_insufficient` | 没有可用设备指标，跳过模型；展示记录不足的温和说明，不写“全部正常” |
+| `data_insufficient` | 没有可用设备指标，跳过模型；展示记录不足的温和说明，不写“全部正常”。判空用 `status` 或 `data_quality.available_metric_ids`：实测 `available_metric_ids=[]` 时 `coverage_limited` 仍为 `false`，不能拿它当空指标信号 |
 | `review_required` | 设备/后端有待核实标记，暂停活动任务，交给后端安全流程；不是问诊分诊结果 |
 | `invalid_input` | 参数、内部上下文或终态不合规；检查输入，不当成正常报告保存 |
 
@@ -1525,8 +1534,9 @@ HTTP 200只表示HTTP层成功。模型节点的raw_output不是最终小结，�
 #### 16.8.9 新增联调验收
 
 - 当前用户已跑通控制台简版：5类指标、病历个人目标关联、模型选择应用、最终ready小结。
-- 本次新增登记了发布URL与私有凭据，尚未使用凭据发送网络调用；先用简版HTTP Body验证发布运行时返回相同schema与版本。
-- 再测完整25项、无档案、缺部分指标、低质量指标、无全部可用指标、待核实标记、模型空正文、认证失败和SSE断流。
+- 2026-11-27 发布URL实测（12 次调用，均 HTTP 200 + SSE `succeeded`）：复现 `ready`、`review_required`、`invalid_input`、`data_insufficient` 四种状态；`workflow_version` 均为 `2026-11-24.daily-companion.2`，响应 `schema_version` 为 `clear-complaint.daily-companion.workflow.v1`；顶层九字段白名单（额外 `user_memory` 返 `invalid_input / INVALID_REQUEST`）与「只引用 `confirmed: true` 照护安排」（未确认的照护建议及其原文在输出中出现 0 次）由平台侧执行；`review_required` 跳过模型（`model_selection_applied: false`）；`baseline` 同设备同口径时输出 7 天观察差值。
+- 发布URL与私有凭据已登记；简版HTTP Body 于 2026-11-27 返回与16.8.1 一致的schema与版本。
+- 仍需补测：完整25项（原附件未提供填值文件）、低质量指标、模型空正文 `degraded`、认证失败和SSE断流。
 - 核对missing与excluded不同：未上传的不等于识别失败；没有基线就不输出相较昨天/上周改善。
 - 核对独立记忆库未接入，不能据请求中额外的user_memory字段宣称已经使用长期记忆。
 
