@@ -773,6 +773,22 @@ def _mapping_list(value: object) -> list[dict[str, object]]:
     return [dict(row) for row in rows if isinstance(row, dict)]
 
 
+def _platform_removed(result: dict[str, object], draft: dict[str, object]) -> int:
+    """平台闸门删掉的候选数（Issue31Fix 实测回显字段）。
+
+    removed_conditions 逐条记录被平台删的候选，随顶层回显或草稿出现，
+    两处都看；gate_actions.citation_failed 是平台引用校验的失败计数。
+    只用于区分「平台删空」与「平台从头没给候选」，后者照旧出档。
+    """
+    rows = result.get("removed_conditions")
+    if not isinstance(rows, list):
+        rows = draft.get("removed_conditions")
+    removed = len(rows) if isinstance(rows, list) else 0
+    actions = result.get("gate_actions")
+    failed = _int_or(actions.get("citation_failed"), 0) if isinstance(actions, dict) else 0
+    return max(removed, failed)
+
+
 async def _apply_draft(
     session: AsyncSession, episode: Episode, result: dict[str, object]
 ) -> AsyncIterator[tuple[str, dict[str, object]]]:
@@ -835,21 +851,25 @@ async def _apply_draft(
         else:
             dropped += 1
 
-    if not kept and dropped:
-        # 约束四（handoff/constraints.md）：删空不出档，只看删除致空。候选被
-        # 删光后，档位与科室没有任何可核依据，不发布结论段落；平台本身没给
-        # 候选（conditions 从头为空，dropped=0）不在此列，维持既有出档路径。
-        # 与 out_of_coverage（保留档位）和平台不可用兜底（保留档位）互不相同。
+    platform_removed = _platform_removed(result, draft)
+    if not kept and (dropped or platform_removed):
+        # 约束四（handoff/constraints.md）：删空不出档，删除不分方。后端引用
+        # 核验删空（dropped）与平台闸门删空（removed_conditions / gate_actions
+        # 记录删除而 draft.conditions 为空）同样没有可核依据，不发布结论段落；
+        # 平台从头就没给候选（dropped=0 且无删除证据）不在此列，维持既有出
+        # 档路径。与 out_of_coverage（保留档位）和平台不可用兜底（保留档位）
+        # 互不相同。
         logger.warning(
-            "引用闸门删空候选，不输出结论 episode_id=%s dropped=%s",
+            "引用闸门删空候选，不输出结论 episode_id=%s dropped=%s platform_removed=%s",
             episode.id,
             dropped,
+            platform_removed,
         )
         gate = dict(episode.gate or {})
         gate.update(
             {
                 "citations_verified": 0,
-                "citations_dropped": dropped,
+                "citations_dropped": dropped + platform_removed,
                 "degraded": False,
                 "fallback": False,
                 "no_conclusion": True,

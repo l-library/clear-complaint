@@ -452,6 +452,42 @@ def test_all_conditions_deleted_publishes_no_conclusion(
     assert done["gate"]["no_conclusion"] is True
 
 
+def test_platform_emptied_candidates_publishes_no_conclusion(
+    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """live 实测（Issue31Fix）：平台闸门删光候选后仍回 draft_ready，后端不得出档。"""
+    response = _draft_ready(conditions=[])
+    response["removed_conditions"] = [{"index": 0, "reason": "INVALID_CITATION_OR_SHAPE"}]
+    response["gate_actions"] = {"citation_failed": 1}
+    fake = Platform([response])
+    monkeypatch.setattr(platform, "call_triage", fake)
+
+    with db_client.stream(
+        "POST", "/api/episodes", json={"complaint": "流鼻涕三天了"}, headers=_sse_headers(user)
+    ) as stream:
+        body = stream.read().decode()
+    events = _parse_events(body)
+    names = _names(events)
+    done = dict(events[-1][1])
+
+    # 约束四删除不分方：平台删空与后端删空同样不出档，流里无任何分诊段落
+    assert events[-1][0] == "done"
+    assert done["triage"] is None
+    assert done["conditions_count"] == 0
+    assert done["degraded"] is False
+    assert done["gate"]["no_conclusion"] is True
+    assert done["gate"]["citations_dropped"] == 1
+    assert "result_section" not in names
+    notices = [dict(event[1]) for event in events if event[0] == "notice"]
+    assert notices[-1]["kind"] == "no_conclusion"
+    assert notices[-1]["text"] == compose.NO_CONCLUSION_NOTICE
+
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["result"] is None
+    assert detail["episode"]["status"] == "saved"
+    assert detail["gate"]["no_conclusion"] is True
+
+
 def test_zero_candidate_draft_still_publishes_result(
     db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
