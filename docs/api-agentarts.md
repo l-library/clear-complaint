@@ -9,7 +9,7 @@
 
 ## 本次交接变更（2026-11-24）
 
-- **Triage 已切换到 `Triage-Workflow-IO6-RouteSafe`（`2026-11-26.mainflow-io.6`，request.v2 / workflow.v2）：原文进、理解出，见 16.3-v2**。后端预提取与追问模板随之退役；Profile 与 Followup 维持 `.2`，Daily 协议保留尚未接入。新运行时 Key（运行时 ID `agent-arts-5f50106a25aa496abf99dfd7c362e5c6`）已于 2026-11-26 通过 HTTP 鉴权与端到端冒烟验收（详见 16.3-v2 验收状态），完整 22 景回归用例包待逐项补实测记录。
+- **Triage 已切换到 `Triage-Workflow-IO6-Issue31Fix`（`2026-11-26.mainflow-io.6.issue31.1`，request.v2 / workflow.v2）：原文进、理解出，见 16.3-v2**。后端预提取与追问模板随之退役；Profile 与 Followup 维持 `.2`，Daily 协议保留尚未接入。前身 RouteSafe 运行时（`agent-arts-5f50106a25aa496abf99dfd7c362e5c6`）已于 2026-11-26 通过 HTTP 鉴权并执行 22 景回归（4 败为平台侧 Merge 过拒，见 issue #31），现运行时 `agent-arts-c0c1711a193e454cb169a2091be6d0e9` 复测 14/14 零 4004。
 - Triage 保留原运行时 URL。截图显示控制台“已提交／保存于 2026-11-24 10:47:51”，但未显示最终 `workflow_version`，不能仅凭截图认定发布接口已运行修订版；按下方版本表核对实际终态。
 - 补齐数字／区间时长、第二轮补问用药以及 `missing_fields / unknown_fields / insufficient_evidence` 的判定约定，详见 16.3.4.1。
 - 截图中的 `query: 你好` 是平台通用示例。本项目统一传 `inputs.request_json` 字符串；调试框粘贴内层业务 JSON，不额外加引号。会话 ID 由后端生成，不能复用截图常量。
@@ -470,7 +470,8 @@ async def invoke_workflow(
 - **HTTP 鉴权与 SSE 事件流**：返回 HTTP 200 `text/event-stream`，事件序列为 `workflow_started` → `message*` → `workflow_finished(succeeded)` → `end`。
 - **端到端冒烟（D01 / D02）**：红旗用例 D01 在后端本地短路（`RF06`）；若将已命中红旗的请求强行送达平台，平台侧同样强制拦截并返回 `BACKEND_RED_FLAG_SHORT_CIRCUIT_REQUIRED`（平台侧复用了错误码 `4004`，即 `4004` 在原有的“草稿不合规”之外新增了第二层含义 `BACKEND_RED_FLAG_SHORT_CIRCUIT_REQUIRED`）。普通用例 D02 首轮返回 `draft_ready`、`triage=clinic`，所有确定性闸门（引用、受控词表、科室）全部通过；平台返回的 `departments / vocab / red_flags` 三个 `controlled_hashes` 与 `backend/app/agent/data` 本地冻结表逐字节一致。
 - **档案快照约束延续至 v2**：`profile_snapshot` 中 `allergies` 为 `null` 时会被平台以 `INVALID_REQUEST/2005` 拒绝；后端 `compose.map_profile_snapshot` 始终完整发送全部六个字段（未知编码为 `["unknown"]`），无代码缺口。
-- **待办**：回归用例包完整 22 景仍待逐项补齐实测记录。
+- **回归结果（2026-11-26）**：22 景执行，17 过；4 败（Q04 unknown 台账、Q05 skip 台账、Q08 多症状补充、I02 注入回答）均为平台侧 Merge-Understanding 过拒（4004），后端编码与契约一致，详见 issue #31。
+- **Issue31Fix 复测（2026-11-26）**：平台修复后切到 `Triage-Workflow-IO6-Issue31Fix`（运行时 `agent-arts-c0c1711a193e454cb169a2091be6d0e9`，验收值 `2026-11-26.mainflow-io.6.issue31.1`），真实接缝 14 次调用零 4004，Q04/Q05/Q08/I02 与 B02 双档上限均复测通过，`workflow_version` 回显 14/14，`controlled_hashes` 零漂移。#31 保持 open 待平台澄清两点（Q04/Q05 重问时长、I02 回滚口径）。
 
 ### 16.4 Profile-Intake-Workflow
 
