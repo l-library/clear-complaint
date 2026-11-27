@@ -5,6 +5,9 @@ export interface DailySummaryItem {
   label?: string
   text?: string
   source_refs?: string[]
+  // 仅来源追溯：指向当前用户档案内的问诊/病历与已确认疾病，展示层不渲染
+  record_id?: string
+  condition_id?: string
 }
 
 export type DailySummaryContent = string | DailySummaryItem
