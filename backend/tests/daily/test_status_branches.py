@@ -176,7 +176,8 @@ def test_invalid_input_raises_and_saves_nothing(
     with pytest.raises(BizException) as excinfo:
         generate(run_db, user_id)
 
-    assert excinfo.value.code is ErrorCode.INVALID_PARAM
+    # D3 起这条失败路径用日报段的 5004，HTTP 400；前端据此展示确定性的输入错误
+    assert excinfo.value.code is ErrorCode.DAILY_INVALID_INPUT
     assert stored(run_db, user_id) == []
 
 

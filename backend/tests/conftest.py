@@ -84,7 +84,7 @@ async def _truncate(engine: AsyncEngine) -> None:
             text(
                 'TRUNCATE "user", consent, refresh_token, profile,'
                 " episode, episode_answer, idempotency_key, reminder,"
-                " followup_record, vital, medication, medication_plan"
+                " followup_record, vital, medication, medication_plan, daily_report"
                 " RESTART IDENTITY CASCADE"
             )
         )

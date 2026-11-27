@@ -1,7 +1,8 @@
 """业务错误码。
 
 三段式：三位数通用段（值与 HTTP 状态码同值，只给框架兜底用），四位数业务段
-（1000 账号、2000 问诊、3000 档案与数据、4000 平台），号段定义在 docs/api.md 第 12 节。
+（1000 账号、2000 问诊、3000 档案与数据、4000 平台、5000 每日健康关怀），
+号段定义在 docs/api.md 第 12 节。
 
 四位数业务码的 HTTP 状态码与值不同（如 1008 是 429），所以 http_status 是显式映射表，
 不是"值即状态码"。新增码必须同时补 _MESSAGES 与 _HTTP_STATUS，tests/test_codes.py
@@ -56,6 +57,12 @@ class ErrorCode(IntEnum):
     AGENTARTS_THROTTLED = 4003
     AGENTARTS_DRAFT_INVALID = 4004
 
+    # 每日健康关怀段：5002/5003 是合法业务结论，不是参数错误，故 HTTP 走 409
+    DAILY_REPORT_NOT_FOUND = 5001
+    DAILY_DATA_INSUFFICIENT = 5002
+    DAILY_REVIEW_REQUIRED = 5003
+    DAILY_INVALID_INPUT = 5004
+
     @property
     def message(self) -> str:
         return _MESSAGES[self]
@@ -100,6 +107,10 @@ _MESSAGES: dict[ErrorCode, str] = {
     ErrorCode.AGENTARTS_TIMEOUT: "平台超时",
     ErrorCode.AGENTARTS_THROTTLED: "平台限流或额度不足",
     ErrorCode.AGENTARTS_DRAFT_INVALID: "草稿结构不合规",
+    ErrorCode.DAILY_REPORT_NOT_FOUND: "当日还没有日报",
+    ErrorCode.DAILY_DATA_INSUFFICIENT: "当日设备记录不足，暂不生成小结",
+    ErrorCode.DAILY_REVIEW_REQUIRED: "当日小结待人工核实",
+    ErrorCode.DAILY_INVALID_INPUT: "日报输入未通过平台校验",
 }
 
 # 3004 默认 404（不存在）；"已处理"的场景由抛出方用 http_status=409 覆盖
@@ -138,4 +149,8 @@ _HTTP_STATUS: dict[ErrorCode, int] = {
     ErrorCode.AGENTARTS_TIMEOUT: 504,
     ErrorCode.AGENTARTS_THROTTLED: 503,
     ErrorCode.AGENTARTS_DRAFT_INVALID: 502,
+    ErrorCode.DAILY_REPORT_NOT_FOUND: 404,
+    ErrorCode.DAILY_DATA_INSUFFICIENT: 409,
+    ErrorCode.DAILY_REVIEW_REQUIRED: 409,
+    ErrorCode.DAILY_INVALID_INPUT: 400,
 }
