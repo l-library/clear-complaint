@@ -1001,10 +1001,48 @@ data: {"episode_id":9001,"stage":"normalize","text":"正在理解你的描述","
   "summary": {
     "title": "今天的健康小结",
     "greeting": "今天辛苦了，我们一起回看设备留下的记录。",
-    "highlights": [],
-    "health_connections": [],
-    "gentle_reminders": [],
-    "tomorrow_actions": [],
+    "highlights": [
+      {
+        "id": "metric:steps",
+        "label": "步数",
+        "text": "今天设备记录了4600步。",
+        "source_refs": ["watch_data.metrics.steps"]
+      },
+      {
+        "id": "metric:sleep_duration",
+        "label": "睡眠时长",
+        "text": "设备记录的睡眠时长为435分钟。",
+        "source_refs": ["watch_data.metrics.sleep_duration"]
+      }
+    ],
+    "health_connections": [
+      {
+        "id": "connection:GUIDANCE-001",
+        "label": "与个人照护目标的联系",
+        "text": "关于“高血压（合成演示）”的原有安排：今天的步数记录落在档案已确认的个人目标区间内。",
+        "source_refs": ["health_archive.care_guidance.GUIDANCE-001"],
+        "record_id": "MEDICAL-001",
+        "condition_id": "CONDITION-001"
+      }
+    ],
+    "gentle_reminders": [
+      {
+        "id": "quality",
+        "label": "数据完整性",
+        "text": "当天有部分指标未记录，缺失数据不代表正常。",
+        "source_refs": []
+      }
+    ],
+    "tomorrow_actions": [
+      {
+        "id": "action:1",
+        "label": "明日安排",
+        "text": "按既有安排继续每天散步，不必因为单日数据临时加量。",
+        "source_refs": ["health_archive.care_guidance.GUIDANCE-001"],
+        "record_id": "MEDICAL-001",
+        "condition_id": "CONDITION-001"
+      }
+    ],
     "closing": "照顾好自己。",
     "limitations": "单日设备变化不能判断疾病好转或恶化。"
   },
@@ -1018,6 +1056,17 @@ data: {"episode_id":9001,"stage":"normalize","text":"正在理解你的描述","
 - `data_source` 当前恒为 `mock`（真实设备适配在后续阶段），前端必须展示模拟标记，模拟记录不得混入真实档案或告警。
 - `degraded` 由内部 `status` 折出，前端不比较字符串：`status=degraded` 时正文是模板兜底，加降级标记后照常展示。
 - `summary` 的板块文案由工作流模板生成，后端只核对板块、来源与日期，不改写；`used_record_ids` 必须能在当前档案里回查。
+- `summary` 的四个内容板块 `highlights`、`health_connections`、`gentle_reminders`、`tomorrow_actions` 都是**对象数组**，不是字符串数组；某个板块可以合法地为空数组（例如当天所有指标都正常时不产生温和提醒），前端不得因此判定报告异常。每个条目的字段：
+
+| 字段 | 约定 |
+| --- | --- |
+| `id` | 当前小结内唯一；`connection:` 前缀表示与档案照护安排的关联 |
+| `label` | 板块内的短标签（类别名），用于分组或辅助展示 |
+| `text` | 面向用户的正文，恒为非空字符串；展示层只渲染这个字段 |
+| `source_refs` | 逻辑溯源标识数组，可为空（如数据完整性提醒）；不是 URL，也不是 JSONPath |
+| `record_id` / `condition_id` | 仅出现在 `health_connections` 与 `tomorrow_actions`；指向当前用户档案内的问诊/病历与已确认疾病，仅供追溯，展示层不必渲染 |
+
+以上形状于 2026-11-27 由真实运行时响应核对，与 `api-agentarts.md` 16.8.7 的样例一致。早期版本的本节示例把四个板块写成空数组、未给出条目形状，曾导致前端按字符串数组实现无法渲染正文。
 - `workflow_version` 是平台回显的 DSL 版本，前端只展示或记日志，不当契约断言。
 
 ### 16.2 `GET /api/daily?date=2026-11-30`

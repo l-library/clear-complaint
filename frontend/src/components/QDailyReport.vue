@@ -143,8 +143,16 @@ const actionLabel = computed(() => {
 function asText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
+function contentText(value: unknown) {
+  const text = asText(value)
+  if (text) return text
+  if (value && typeof value === 'object' && 'text' in value) {
+    return asText((value as { text?: unknown }).text)
+  }
+  return ''
+}
 function listOf(value: unknown) {
-  return Array.isArray(value) ? value.map(asText).filter((item) => item !== '') : []
+  return Array.isArray(value) ? value.map(contentText).filter((item) => item !== '') : []
 }
 function applyReport(value: DailyReport) {
   report.value = value
