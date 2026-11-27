@@ -25,14 +25,17 @@ _REQUEST_SCHEMAS = {
     "followup": "clear-complaint.followup-supplement.request.v1",
     # io.6（RouteSafe）：原文进、理解出，request.v2 / workflow.v2（api-agentarts 16.3-v2）
     "triage": "clear-complaint.triage.request.v2",
+    # Daily-Health-Companion：响应只有 workflow.v1，DSL 版本走回显的 workflow_version（16.8.1）
+    "daily": "clear-complaint.daily-companion.request.v1",
 }
 _RESPONSE_SCHEMAS = {
     "profile": "clear-complaint.profile-intake.workflow.v1",
     "followup": "clear-complaint.followup-supplement.workflow.v1",
     "triage": "clear-complaint.triage.workflow.v2",
+    "daily": "clear-complaint.daily-companion.workflow.v1",
 }
 # 16.2.4 的超时表；总生成上限 60 秒是业务层的事，客户端只管单次调用
-_TIMEOUT_SECONDS = {"profile": 30.0, "followup": 8.0, "triage": 50.0}
+_TIMEOUT_SECONDS = {"profile": 30.0, "followup": 8.0, "triage": 50.0, "daily": 60.0}
 
 
 @dataclass(frozen=True)
@@ -51,11 +54,13 @@ def _workflow(name: str) -> Workflow:
         "profile": settings.agentarts_profile_intake_url,
         "followup": settings.agentarts_followup_supplement_url,
         "triage": settings.agentarts_triage_url,
+        "daily": settings.agentarts_daily_companion_url,
     }
     keys = {
         "profile": settings.agentarts_profile_intake_api_key,
         "followup": settings.agentarts_followup_supplement_api_key,
         "triage": settings.agentarts_triage_api_key,
+        "daily": settings.agentarts_daily_companion_api_key,
     }
     if name not in urls:
         raise ValueError(f"未知工作流: {name}")

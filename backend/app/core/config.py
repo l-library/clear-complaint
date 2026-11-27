@@ -23,13 +23,15 @@ class Settings(BaseSettings):
     access_token_seconds: int = 2 * 60 * 60
     refresh_token_days: int = 30
 
-    # AgentArts 三条工作流（docs/api-agentarts.md 16.1）。Key 只经环境变量注入，永不入库
+    # AgentArts 四条工作流（docs/api-agentarts.md 16.1、16.8）。Key 只经环境变量注入，永不入库
     agentarts_profile_intake_url: str = ""
     agentarts_followup_supplement_url: str = ""
     agentarts_triage_url: str = ""
+    agentarts_daily_companion_url: str = ""
     agentarts_profile_intake_api_key: str = ""
     agentarts_followup_supplement_api_key: str = ""
     agentarts_triage_api_key: str = ""
+    agentarts_daily_companion_api_key: str = ""
     agentarts_invoke_mode: str = "published"
 
     # 进程内定时任务（用药提醒生成、超时、过期、未保存清理）。
