@@ -25,7 +25,7 @@
 - 「调取所有档案」在后端完成。前端不传任何档案字段，也不传手表原始数据；
   档案由后端按登录身份检索整理（16.8.8 第 1、3 条）。
 
-## 2. 已验证事实（2026-11-24，发布 URL 实测）
+## 2. 已验证事实（2026-11-24 首测，2026-11-27 复核）
 
 凭据与 URL 来自《鉴权信息-仅后端(2).md》。这是该 Key 首次通过 HTTP 验证，
 文档 16.8.1 的「发布 URL 未验证」可以销项。
@@ -35,18 +35,43 @@
 | 简版（5 指标 + 高血压档案 + 步数目标） | `ready`，协议五项回显校验全过，connection/tomorrow 均只引用已确认安排 |
 | 无档案 | `ready`，`used_record_ids: []`，不编造建议 |
 | 待核实标记（review） | `review_required`，`model_selection_applied: false`，跳过模型 |
-| 全 25 项指标 | `ready`，步数与睡眠两条联系均挂确认来源 |
-| 缺 `schema_version` | `invalid_input` / `INVALID_REQUEST`，**request_id 不回显** |
+| 全 25 项指标 | `ready`，25 项全部可用；这条用例只带了活动类照护安排，所以只有步数一条联系。另加一条已确认睡眠安排（见本表「两条已确认照护安排」一行）才出现第二条 |
+| 缺 `schema_version` | `invalid_input` / `INVALID_REQUEST`，`request_id` 正常回显（2026-11-27 复核；旧稿记「不回显」，已不成立） |
 | `watch_data.date` 与 `report_date` 不一致 | `invalid_input` / `INVALID_REQUEST`，回显正常 |
+| 顶层多出 `user_memory`（2026-11-27 新增） | `invalid_input` / `INVALID_REQUEST`，回显正常，`model_selection_applied: false` |
+| `schema_version` 取值错误（2026-11-27 新增） | `invalid_input` / `INVALID_REQUEST`，回显正常 |
+| 带 `baseline`（2026-11-27 新增） | `ready`，同设备同口径，步数／睡眠／静息心率三项 7 天观察差值 |
+| 两条已确认照护安排（2026-11-27 新增） | `ready`，步数与睡眠各一条联系、各一条明日安排 |
+| 25 项全 null（2026-11-27 新增） | `data_insufficient`，`available_metric_ids: []`，纯模板文案，0.82 秒 |
+| 加入 `confirmed: false` 的照护建议（2026-11-27 新增） | `ready`，该建议的 id 与原文在输出中出现 0 次，只引用已确认的两条 |
 
-每次调用 HTTP 200、SSE 终态 `succeeded`，`workflow_version` 均为
-`2026-11-24.daily-companion.1`（2026-11-24 平台升至 `.2` 后复测通过：顶层九字段
-白名单强校验、多出的 `user_memory` 等键返回 `invalid_input / INVALID_REQUEST`
-并正常回显 `request_id`，验收用例行为不变）。
+每次调用 HTTP 200、SSE 终态 `succeeded`；`workflow_version` 在 2026-11-27 的 12 次
+调用中均为 `2026-11-24.daily-companion.2`（2026-11-24 交接稿记 `.1`，平台随后升到
+`.2`）。响应 `schema_version` 仍是 `clear-complaint.daily-companion.workflow.v1`，
+没有 `.v2` 响应 schema：文档里说的「v2」指 DSL 版本 `.2`，不能按 `.workflow.v2` 去
+校验。顶层九字段白名单强校验在升版后仍成立，多出的 `user_memory` 等键返回
+`invalid_input / INVALID_REQUEST`，验收用例行为不变。
 
-平台侧已知毛病（与本仓库无关，已列入给平台协作者的清单）：schema 校验
-失败时 request_id 回显为空串，客户端按「请求关联不匹配」处理会吞掉真实
-错误原因。triage 工作流同样有此问题。
+平台侧曾有毛病（与本仓库无关，曾列入给平台协作者的清单）：schema 校验失败时
+request_id 回显为空串，客户端按「请求关联不匹配」处理会吞掉真实错误原因。
+2026-11-27 复核时不再复现：缺 `schema_version`、顶层多出 `user_memory`、
+`schema_version` 取值错误三类失败都逐字回显 `request_id`。所以不要为它实现
+「回显为空即判关联失败」的旁路；`request_id` 缺失只记日志，错误以 `error_code`
+为准。畸形 JSON 是否仍回显空串没有测，后端保留空值分支（api-agentarts.md 16.3.2）。
+triage 当年报过同一现象，本次未复测，不能据此认定 triage 仍有此问题。
+
+2026-11-27 复核：运行时 `agent-arts-fe15b614a68241f0b850005b9b325630`，12 次全合成
+调用均 HTTP 200、`content-type: text/event-stream`，终态 `succeeded`，耗时
+0.5–20.6 秒，在 16.8 的 60 秒预算内；响应顶层恰好 16 个键，没有出现五种之外的
+status。与交接稿不一致的三处已按实测写回 api-agentarts.md 16.8.6 / 16.8.7：版本是
+`.2`；校验失败回显 `request_id`；失败路径的 `data_source` 为 `unknown`、`report_date`
+为 `""`、`summary` 为 `null`、`data_quality` 为 `{}`。`data_quality.coverage_limited`
+在 `available_metric_ids` 为空时仍为 `false`，判空要用 `status` 或
+`available_metric_ids`。`degraded`（模型输出被拒）、认证失败、SSE 断流本轮没有覆盖。
+
+证据在仓库外：`Documents/private/clear-complaint/daily-companion-实测-2026-11-27.md`，
+探针脚本在 `Documents/private/clear-complaint/daily-probe-harness/`，都不入库。
+以上只证明平台契约可用，`app/daily`、迁移和前端页面仍没有代码。
 
 ## 3. 架构骨架
 
@@ -71,6 +96,10 @@ frontend/src/pages/daily/       展示页（协作者负责，本计划只定接
   输入快照哈希、`created_at/updated_at`。唯一约束 `(user_id, report_date,
   workflow_version)`：一个用户一天一份当前报告，重复生成按更新覆盖，
   迟到旧结果不覆盖新报告（16.8.8 第 6 条）。
+- `workflow_version` 存平台回显值，不在客户端写死断言：平台每次发布新 DSL 都会 bump
+  （交接时 `.1`，2026-11-27 已 `.2`），写死会让下一次发布时所有生成失败。
+- 响应解析要能接受 `invalid_input` 的空壳：`summary` 为 `null`、`data_quality` 为
+  `{}`、`report_date` 为 `""`、`data_source` 为 `unknown`（api-agentarts.md 16.8.7 末）。
 - 不做：user_memory、逐秒采样、ECG 波形、通用健康评分、推送。工作流本版
   就没有这些入口，文档明说不假装支持。
 
@@ -97,7 +126,7 @@ v1 能组装出的档案是薄的：
 | --- | --- | --- | --- |
 | D0 | 本计划 + 第 8 节登记（本分支当前提交） | 评审通过 | 进行中 |
 | D1 | Settings 两条配置 + client 增加 daily 映射 + fake transport 单测 | `uv run pytest` 全绿；不新增任何公开路由 | 未开始 |
-| D2 | `app/daily` 领域包：mock_watch、archive 组装、daily_report 表与迁移、五种 status 分支、快照幂等 | 单测覆盖 status 分支与档案组装；迁移从空库可重放 | 未开始 |
+| D2 | `app/daily` 领域包：mock_watch、archive 组装、daily_report 表与迁移、五种 status 分支、快照幂等 | 单测覆盖 status 分支与档案组装；迁移从空库可重放；`invalid_input` 的 `summary=null`、`data_quality={}`、`data_source=unknown` 不触发解析异常 | 未开始 |
 | D3 | 公开 API：`POST /api/daily/generate`、`GET /api/daily`；错误码映射；`docs/api.md` 登记 | Playwright 重放四用例（简版/无档案/待核实/全 25 项）经本地后端全通 | 未开始 |
 | D4 | 前端展示页与文案（协作者） | 手册走查：模拟标记可见、degraded 标记可见、不出现诊断措辞 | 未开始 |
 | D5 | 真实设备适配、定时生成、推送、Key 轮换 | 另行立项 | 推迟 |
