@@ -419,6 +419,9 @@ const dailyModules = loader({
   },
 })
 const DailyApiError = dailyModules('@/request').ApiError
+// 夹具形状必须来自真实捕获或 docs/api.md 的契约，不能照着实现里的类型写。
+// 这里的四个板块曾按 string[] 造数据，与真实的对象数组不符：猜测验证了猜测，
+// 页面在真实响应下四个板块全部不渲染，而 CI 一路绿。
 const dailyReport = { report_date: '2026-12-01', status: 'ready', degraded: false, data_source: 'mock', workflow_version: '2026-11-24.daily-companion.2', summary: { title: 'SYNTHETIC DAILY TITLE', greeting: 'SYNTHETIC GREETING', highlights: [{ id: 'metric:steps', label: 'SYNTHETIC LABEL', text: 'SYNTHETIC HIGHLIGHT', source_refs: ['watch_data.metrics.steps'] }], health_connections: [], gentle_reminders: [{ id: 'quality', label: 'SYNTHETIC REMINDER LABEL', text: 'SYNTHETIC REMINDER', source_refs: [] }], tomorrow_actions: [{ id: 'action:1', label: 'SYNTHETIC ACTION LABEL', text: 'SYNTHETIC ACTION', source_refs: [] }], closing: 'SYNTHETIC CLOSING', limitations: 'SYNTHETIC LIMITATION' }, data_quality: { wear_minutes: 600 }, used_record_ids: ['ep12'], created_at: '2026-12-01 21:00:00', updated_at: '2026-12-01 21:00:00' }
 const dailyScope = vue.effectScope()
 const daily = dailyScope.run(() => dailyModules('@/components/QDailyReport.vue').default.setup({}, { expose() {} }))
