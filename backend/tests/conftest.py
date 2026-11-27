@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import NullPool
 
+from app.core.config import get_settings
 from app.db.session import get_session
 from app.main import app
 
@@ -38,6 +39,19 @@ DEFAULT_TEST_URL = (
 
 def test_database_url() -> str:
     return os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_URL)
+
+
+@pytest.fixture
+def export_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """导出目录指到临时目录。
+
+    `DELETE /api/data` 与 `DELETE /api/account` 会顺带清导出文件，未配置
+    EXPORT_DIR 时那条路径直接报错；CI 没有 .env，所以凡是要走这两个接口的用例
+    都必须领这个 fixture，否则本地（有 .env）绿、CI 红。
+    """
+    directory = tmp_path / "exports"
+    monkeypatch.setattr(get_settings(), "export_dir", str(directory))
+    return directory
 
 
 async def _recreate_database(url: str) -> None:
@@ -84,7 +98,7 @@ async def _truncate(engine: AsyncEngine) -> None:
             text(
                 'TRUNCATE "user", consent, refresh_token, profile,'
                 " episode, episode_answer, idempotency_key, reminder,"
-                " followup_record, vital, medication, medication_plan"
+                " followup_record, vital, medication, medication_plan, daily_report"
                 " RESTART IDENTITY CASCADE"
             )
         )

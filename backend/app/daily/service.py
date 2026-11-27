@@ -1,8 +1,8 @@
 """每日健康关怀业务：请求组装、本地安全标记、五种 status 分支、落库与幂等。
 
-D2 只有内部入口 `generate_daily_report`（D3 的 router 调它），没有公开路由。
-信任边界在 16.8.8 第 1、3 条：用户身份由调用方传入，档案与手表数据都由后端
-自己拼，前端永远不提交指标或档案字段。
+D3 的 router 调 `generate_daily_report` 生成、`get_daily_report` 读取；status → 信封
+的映射在 router 里。信任边界在 16.8.8 第 1、3 条：用户身份由调用方传入，档案与
+手表数据都由后端自己拼，前端永远不提交指标或档案字段。
 """
 
 import json
@@ -15,7 +15,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.clock import now_shanghai
+from app.common.clock import format_shanghai, now_shanghai
 from app.common.codes import ErrorCode
 from app.common.errors import BizException
 from app.daily import archive as archive_module
@@ -211,6 +211,52 @@ async def _current_reports(
     return list((await session.execute(query)).scalars().all())
 
 
+async def get_daily_report(
+    session: AsyncSession, user_id: int, report_date: date
+) -> DailyReport | None:
+    """读侧取 updated_at 最新的一行：平台升版后同一天会按版本各留一行。"""
+    query = (
+        select(DailyReport)
+        .where(DailyReport.user_id == user_id, DailyReport.report_date == report_date)
+        .order_by(DailyReport.updated_at.desc())
+        .limit(1)
+    )
+    return (await session.execute(query)).scalars().first()
+
+
+def resolve_report_date(raw: str | None) -> date:
+    """请求里的日期：缺省取当天，格式必须是 yyyy-MM-dd，且不得晚于今天。
+
+    日报只总结已经发生的一天，未来日期没有可用的记录；两个接口共用这条规则。
+    """
+    today = now_shanghai().date()
+    if not raw:
+        return today
+    try:
+        day = datetime.strptime(raw, "%Y-%m-%d").date()
+    except ValueError:
+        raise BizException(ErrorCode.INVALID_PARAM, "report_date 必须是 yyyy-MM-dd") from None
+    if day > today:
+        raise BizException(ErrorCode.INVALID_PARAM, "report_date 不得晚于今天")
+    return day
+
+
+def report_payload(row: DailyReport) -> dict[str, Any]:
+    """落库行 → 对外字段；`degraded` 由内部 status 折出，前端不必自己判断字符串。"""
+    return {
+        "report_date": row.report_date.isoformat(),
+        "status": row.status,
+        "degraded": row.status == STATUS_DEGRADED,
+        "data_source": row.data_source,
+        "workflow_version": row.workflow_version,
+        "summary": row.summary,
+        "data_quality": row.data_quality,
+        "used_record_ids": list(row.used_record_ids or []),
+        "created_at": format_shanghai(row.created_at),
+        "updated_at": format_shanghai(row.updated_at),
+    }
+
+
 async def persist_report(
     session: AsyncSession,
     *,
@@ -322,7 +368,7 @@ async def generate_daily_report(
             result.get("error_code"),
             result.get("request_id"),
         )
-        raise BizException(ErrorCode.INVALID_PARAM, "日报输入未通过平台校验")
+        raise BizException(ErrorCode.DAILY_INVALID_INPUT, "日报输入未通过平台校验")
     if status not in REPORT_STATUSES:
         raise _unavailable(f"日报返回未知 status: {status or '空'}")
 

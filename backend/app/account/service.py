@@ -33,13 +33,14 @@ from app.account.schema import (
 from app.account.schema import (
     Profile as ProfileOut,
 )
-from app.archive.models import Medication, Vital
+from app.archive.models import Medication, MedicationPlan, Vital
 from app.common.clock import format_shanghai, now_shanghai
 from app.common.codes import ErrorCode
 from app.common.errors import BizException
 from app.core.config import get_settings
+from app.daily.models import DailyReport
 from app.db.session import get_session
-from app.episode.models import Episode
+from app.episode.models import Episode, IdempotencyKey
 from app.reminder import models as reminder_models
 
 logger = logging.getLogger(__name__)
@@ -262,14 +263,26 @@ async def clear_user_data(session: AsyncSession, user: User, confirm: str) -> di
             .where(reminder_models.Reminder.user_id == user.id)
         ),
     }
-    # 顺序：先删挂靠行（外键级联会带走答案、幂等键、随访记录与计划），
-    # 再删独立行，最后档案。硬删，不做软删
+    # 顺序：先子后父，按 user_id 逐表硬删（不做软删）。每张带 user_id 的表都要
+    # 在这里出现——漏一张就会留下残留行，或在删 user 行时外键冲突。
+    # 不能只靠外键级联：idempotency_key 也有自己的 user_id 且 episode_id 可空，
+    # 挂不到任何 episode 上的行不会被级联带走。只有 episode_answer 没有 user_id，
+    # 它随 episode 的 ON DELETE CASCADE 删。
+    # tests/account/test_data_clear_coverage.py 按元数据逐表校验零残留。
+    await session.execute(
+        delete(reminder_models.FollowupRecord).where(
+            reminder_models.FollowupRecord.user_id == user.id
+        )
+    )
     await session.execute(
         delete(reminder_models.Reminder).where(reminder_models.Reminder.user_id == user.id)
     )
+    await session.execute(delete(IdempotencyKey).where(IdempotencyKey.user_id == user.id))
     await session.execute(delete(Episode).where(Episode.user_id == user.id))
-    await session.execute(delete(Vital).where(Vital.user_id == user.id))
+    await session.execute(delete(MedicationPlan).where(MedicationPlan.user_id == user.id))
     await session.execute(delete(Medication).where(Medication.user_id == user.id))
+    await session.execute(delete(Vital).where(Vital.user_id == user.id))
+    await session.execute(delete(DailyReport).where(DailyReport.user_id == user.id))
     await session.execute(delete(Profile).where(Profile.user_id == user.id))
     await session.commit()
     # 导出令牌与文件一并清掉，不留可下载的个人数据

@@ -852,7 +852,7 @@ data: {"episode_id":9001,"stage":"normalize","text":"正在理解你的描述","
 
 ### 11.3 `DELETE /api/data`
 
-请求 `{ "confirm": "删除" }`。清空档案、体征、用药、计划、问诊、引用、随访、提醒与事件记录，账号保留。响应 `{ "cleared": { "episodes": 3, "vitals": 5, "medications": 2, "reminders": 4 } }`。
+请求 `{ "confirm": "删除" }`。清空档案、体征、用药、计划、问诊、引用、随访、提醒、日报与事件记录，账号保留。响应 `{ "cleared": { "episodes": 3, "vitals": 5, "medications": 2, "reminders": 4 } }`。
 
 错误：3006 确认文本不匹配（HTTP 400）。
 
@@ -905,6 +905,10 @@ data: {"episode_id":9001,"stage":"normalize","text":"正在理解你的描述","
 | 4002 | 504 | 平台超时 | 是 |
 | 4003 | 503 | 平台限流或额度不足 | 是（延后） |
 | 4004 | 502 | 草稿结构不合规 | 是 |
+| 5001 | 404 | 当日还没有日报 | 是（先调 `POST /api/daily/generate`） |
+| 5002 | 409 | 当日设备记录不足，暂不生成小结 | 否（等真实数据接入） |
+| 5003 | 409 | 当日小结待人工核实 | 否 |
+| 5004 | 400 | 日报输入未通过平台校验 | 否（确定性失败） |
 
 平台类错误（4001–4004）在问诊接口里也表现为放行兜底结果：HTTP 仍返回 200 的流，流内以 `done`（含 `degraded=true`）结束，同时在 `stage` 文案里说明已采用保守建议；只有在流建立之前就失败时才直接返回错误信封。
 
@@ -932,7 +936,7 @@ data: {"episode_id":9001,"stage":"normalize","text":"正在理解你的描述","
 
 | 项 | 约定 |
 | --- | --- |
-| 包结构 | `app/account`（认证、档案、数据管理）、`app/archive`（体征、用药、计划、聚合）、`app/episode`（问诊、流式、约束详情）、`app/reminder`（随访、复查、用药提醒）、`app/agent`（AgentArts 客户端与闸门），各包含 `router.py`、`service.py`、`schema.py`、`models.py` |
+| 包结构 | `app/account`（认证、档案、数据管理）、`app/archive`（体征、用药、计划、聚合）、`app/episode`（问诊、流式、约束详情）、`app/reminder`（随访、复查、用药提醒）、`app/daily`（每日健康关怀）、`app/agent`（AgentArts 客户端与闸门），各包含 `router.py`、`service.py`、`schema.py`、`models.py` |
 | 路由注册 | 各包 `router` 在 `app/api/__init__.py` 汇总，`/api` 前缀只在 `main.py` 出现一次 |
 | 鉴权依赖 | `Depends(get_current_user)` 放在需要鉴权的 router 上，流式接口同样适用 |
 | 响应包装 | 成功用 `ok(data)`，业务错误抛 `BizException(ErrorCode.XXX)`，不手写 JSON |
@@ -968,3 +972,66 @@ data: {"episode_id":9001,"stage":"normalize","text":"正在理解你的描述","
 | 跨用户数据聚合 | 同上 |
 | 接口限流与配额 | 当前只用进程内计数处理登录失败，后续需要再引入 Redis |
 | 前端类型自动生成 | 候选 `openapi-typescript`，等接口稳定后再接 |
+
+## 16. 每日健康关怀
+
+日报回顾「已经发生的一天」：手表指标由后端合成，档案摘要由后端组装，前端不提交任何指标或档案字段（信任边界见 api-agentarts.md 16.8.8 第 1 条）。两个接口都是非流式，平台单次调用预算 60 秒，业务层不重试。
+
+### 16.1 `POST /api/daily/generate`
+
+请求体可省略，只接受一个字段：
+
+```json
+{ "report_date": "2026-11-30" }
+```
+
+- `report_date` 省略时取 `Asia/Shanghai` 的当天；格式 `yyyy-MM-dd`，不得晚于今天，否则 400 + 400。
+- 同日重复调用按当前档案与合成数据重算并覆盖同一份报告（用户＋日期＋工作流版本唯一），不产生第二条当前报告；迟到结果不覆盖更新的报告。
+- 只读后端数据：指标来自合成手表数据（`data_source=mock`），档案来自档案表。`watch_data`、`health_archive`、`user_id` 等字段不接受，出现即 400 + 400。
+
+响应 `data`：
+
+```json
+{
+  "report_date": "2026-11-30",
+  "status": "ready",
+  "degraded": false,
+  "data_source": "mock",
+  "workflow_version": "2026-11-24.daily-companion.2",
+  "summary": {
+    "title": "今天的健康小结",
+    "greeting": "今天辛苦了，我们一起回看设备留下的记录。",
+    "highlights": [],
+    "health_connections": [],
+    "gentle_reminders": [],
+    "tomorrow_actions": [],
+    "closing": "照顾好自己。",
+    "limitations": "单日设备变化不能判断疾病好转或恶化。"
+  },
+  "data_quality": { "wear_minutes": 1380, "available_metric_ids": ["steps"], "coverage_limited": false },
+  "used_record_ids": ["ep12"],
+  "created_at": "2026-11-30 21:14:00",
+  "updated_at": "2026-11-30 21:14:00"
+}
+```
+
+- `data_source` 当前恒为 `mock`（真实设备适配在后续阶段），前端必须展示模拟标记，模拟记录不得混入真实档案或告警。
+- `degraded` 由内部 `status` 折出，前端不比较字符串：`status=degraded` 时正文是模板兜底，加降级标记后照常展示。
+- `summary` 的板块文案由工作流模板生成，后端只核对板块、来源与日期，不改写；`used_record_ids` 必须能在当前档案里回查。
+- `workflow_version` 是平台回显的 DSL 版本，前端只展示或记日志，不当契约断言。
+
+### 16.2 `GET /api/daily?date=2026-11-30`
+
+查询参数 `date`（默认今天，规则同 16.1）。响应 `data` 与 16.1 相同，返回该日**最新写入**的一份；平台升版后同一天可能留有多个版本的行，本接口只取 `updated_at` 最新的一行。本接口不触发生成，没生成过就返回 5001。
+
+### 16.3 status → 信封
+
+| 报告 status | `code` | HTTP | 前端表现 |
+| --- | --- | --- | --- |
+| `ready` | 0 | 200 | 正常展示 |
+| `degraded` | 0 | 200 | 展示并加降级标记（`degraded=true`） |
+| `data_insufficient` | 5002 | 409 | 温和说明当天记录不足，不写「一切正常」 |
+| `review_required` | 5003 | 409 | 待人工核实，暂停活动任务，不替代既有急诊处理 |
+| `invalid_input` | 5004 | 400 | 输入未通过平台校验，不落库，确定性失败不重试 |
+
+两个接口共用这张表；读不到报告返回 5001（HTTP 404）。5002/5003 用 409 而不是 200：请求本身合法，是当前状态（设备记录不足、待人工核实）不足以给出小结，且这两种状态下没有可展示的正文，前端按 `code` 取本地文案。
