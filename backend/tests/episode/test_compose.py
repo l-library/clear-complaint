@@ -1,7 +1,7 @@
-"""compose 的 v2 产物：覆盖范围版结果与单向阀。
+"""compose 的 v2 产物：覆盖范围版结果、单向阀与删空不出档的声明文案。
 
 v1 的预提取与追问模板已随 request.v2 退役（理解归工作流），
-这里只覆盖新增的覆盖范围出口。
+这里只覆盖新增的出口文案与受控取值。
 """
 
 from app.episode import compose
@@ -44,3 +44,12 @@ def test_not_understood_notice_is_conversational() -> None:
     assert "没太听懂" in compose.NOT_UNDERSTOOD_NOTICE
     assert "门诊" not in compose.NOT_UNDERSTOOD_NOTICE
     assert "急诊" not in compose.NOT_UNDERSTOOD_NOTICE
+
+
+def test_no_conclusion_notice_is_a_boundary_statement() -> None:
+    # 删空不出档（约束四）：声明给不出结论，不出现档位或科室字样，只给下一步
+    assert "不提供分诊档位与就诊科室" in compose.NO_CONCLUSION_NOTICE
+    for label in compose.TRIAGE_LABELS.values():
+        assert label not in compose.NO_CONCLUSION_NOTICE
+    assert "全科医学科" not in compose.NO_CONCLUSION_NOTICE
+    assert "再发起一次" in compose.NO_CONCLUSION_NOTICE
