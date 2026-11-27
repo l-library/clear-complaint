@@ -11,7 +11,7 @@ import {
 } from '@/api/episodes'
 
 
-export type WorkspaceTab = 'chat' | 'archive' | 'plans'
+export type WorkspaceTab = 'chat' | 'archive' | 'plans' | 'daily'
 
 interface Message { id: string; role: 'user' | 'assistant'; content: string }
 export const useLiveWorkspaceStore = defineStore('live-workspace', () => {

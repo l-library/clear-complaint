@@ -15,6 +15,7 @@
           <button role="button" tabindex="0" @keydown="activateButton" @click="navigate('chat'); menuOpen = false">AI 对话</button>
           <button role="button" tabindex="0" @keydown="activateButton" @click="navigate('archive'); menuOpen = false">健康档案</button>
           <button role="button" tabindex="0" @keydown="activateButton" @click="navigate('plans'); menuOpen = false">健康计划</button>
+          <button role="button" tabindex="0" @keydown="activateButton" @click="navigate('daily'); menuOpen = false">每日小结</button>
         </view>
       </view>
       <view class="landing-main">
@@ -51,6 +52,9 @@
           <button role="button" tabindex="0" @keydown="activateButton" class="nav-item" :class="{ 'nav-item-active': activeTab === 'plans' }" :aria-pressed="activeTab === 'plans'" aria-label="健康计划" @click="navigate('plans')">
             <QIcon name="calendar" /><text v-if="sidebarExpanded">健康计划</text><text v-else class="nav-tooltip">健康计划</text>
           </button>
+          <button role="button" tabindex="0" @keydown="activateButton" class="nav-item" :class="{ 'nav-item-active': activeTab === 'daily' }" :aria-pressed="activeTab === 'daily'" aria-label="每日小结" @click="navigate('daily')">
+            <QIcon name="clock" /><text v-if="sidebarExpanded">每日小结</text><text v-else class="nav-tooltip">每日小结</text>
+          </button>
         </view>
         <view v-if="sidebarExpanded" class="recent-conversations">
           <text class="recent-heading">最近对话</text>
@@ -74,6 +78,7 @@
         <view class="workspace-content">
           <view v-show="activeTab === 'archive'" class="workspace-pane"><QHealthArchive @open-conversation="openConversation" /></view>
           <view v-show="activeTab === 'plans'" class="workspace-pane"><QHealthPlans @open-followup="openFollowUp" @open-archive="navigate('archive')" /></view>
+          <view v-show="activeTab === 'daily'" class="workspace-pane"><QDailyReport /></view>
           <view v-if="activeTab === 'chat' && !messages.length" class="empty-chat">
             <view class="chat-welcome">
               <QBrandMark class="welcome-mark" animated />
@@ -134,6 +139,7 @@ import QBrandMark from '@/components/QBrandMark.vue'
 import QComposer from '@/components/QComposer.vue'
 import QHealthArchive from '@/components/QLiveArchive.vue'
 import QHealthPlans from '@/components/QLivePlans.vue'
+import QDailyReport from '@/components/QDailyReport.vue'
 import QAccountPanel from '@/components/QAccountPanel.vue'
 import QEpisodeReview from '@/components/QEpisodeReview.vue'
 import QConsultationFlow from '@/components/QConsultationFlow.vue'
@@ -152,12 +158,20 @@ const messageScrollTop = ref(0)
 const messageCount = computed(() => messages.value.length)
 const isFollowUp = computed(() => Boolean(store.followUpReminder))
 const isCompletedFollowUp = computed(() => Boolean(store.followUpReminder && store.followUpReminder.status !== 'pending'))
-const pageTitle = computed(() => activeTab.value === 'archive' ? '健康档案' : activeTab.value === 'plans' ? '健康计划' : activeConversation.value?.title || 'AI 对话')
+const pageTitles: Record<WorkspaceTab, string> = { chat: 'AI 对话', archive: '健康档案', plans: '健康计划', daily: '每日小结' }
+const pageTitle = computed(() => activeTab.value === 'chat' ? activeConversation.value?.title || 'AI 对话' : pageTitles[activeTab.value])
 const navigationTabs: { id: WorkspaceTab; title: string; icon: string }[] = [
   { id: 'chat', title: 'AI 对话', icon: 'chat' },
   { id: 'archive', title: '健康档案', icon: 'file' },
   { id: 'plans', title: '健康计划', icon: 'calendar' },
+  { id: 'daily', title: '每日小结', icon: 'clock' },
 ]
+const workspacePaths: Record<WorkspaceTab, string> = {
+  chat: 'pages/chat/index',
+  archive: 'pages/health-records/index',
+  plans: 'pages/health-plans/index',
+  daily: 'pages/daily/index',
+}
 interface ElementRect { left: number; top: number; width: number; height: number }
 const messageTransition = ref<InstanceType<typeof QMessageTransition> | null>(null)
 const transferring = ref(false)
@@ -215,7 +229,7 @@ function choosePrompt(content: string) {
 let navigating = false
 function navigate(tab: WorkspaceTab) {
   store.openWorkspace(tab)
-  const path = tab === 'chat' ? 'pages/chat/index' : tab === 'archive' ? 'pages/health-records/index' : 'pages/health-plans/index'
+  const path = workspacePaths[tab]
   const query = tab === 'chat' && store.followUpReminder
     ? `?reminder_id=${store.followUpReminder.id}&date=${store.followUpReminder.due_at.slice(0, 10)}`
     : tab === 'chat' && activeConversation.value
@@ -225,7 +239,7 @@ function navigate(tab: WorkspaceTab) {
   const page = pages[pages.length - 1] as unknown as { route?: string; options?: Record<string, string> } | undefined
   const sameContext = tab === 'chat'
     ? store.followUpReminder ? page?.options?.reminder_id === String(store.followUpReminder.id) : (page?.options?.conversation_id || '') === (activeConversation.value?.id || '')
-    : tab === 'archive' || (page?.options?.tab || 'all') === store.selectedPlanTab
+    : tab === 'plans' ? (page?.options?.tab || 'all') === store.selectedPlanTab : true
   if (!navigating && (page?.route !== path || !sameContext)) {
     navigating = true
     uni.redirectTo({ url: `/${path}${query}`, complete: () => { navigating = false } })

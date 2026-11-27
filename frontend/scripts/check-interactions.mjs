@@ -24,7 +24,7 @@ function loader(overrides = {}, globals = {}) {
     if (name === 'pinia') return pinia
     if (!name.startsWith('@/')) return require(name)
     if (name.endsWith('.json')) return { default: JSON.parse(readFileSync(new URL(name.slice(2), src), 'utf8')) }
-    if (name.endsWith('.vue') && !['QWorkspace', 'QLiveArchive', 'QLivePlans', 'QAccountPanel', 'QCityPicker', 'QEpisodeReview', 'QConsultationFlow'].some((component) => name === `@/components/${component}.vue`)) return {}
+    if (name.endsWith('.vue') && !['QWorkspace', 'QLiveArchive', 'QLivePlans', 'QDailyReport', 'QAccountPanel', 'QCityPicker', 'QEpisodeReview', 'QConsultationFlow'].some((component) => name === `@/components/${component}.vue`)) return {}
     if (cache.has(name)) return cache.get(name)
     let url = new URL(name.slice(2) + (name.endsWith('.vue') ? '' : '.ts'), src)
     if (!existsSync(url)) url = new URL(name.slice(2) + '/index.ts', src)
@@ -405,6 +405,89 @@ assert.equal(requestedDays[6], '2027-01-03')
 assert.equal(week.reminders.value.length, 7)
 assert.equal(week.reminders.value[0].due_at, '2026-12-28 09:00:00')
 weekScope.stop()
+
+// 每日小结（D4）：业务码分支、模拟与降级标记、summary=null 的兜底文案
+const dailyWorkspace = { auth: vue.reactive({ user: { id: 31 }, isLoggedIn: true }), activeTab: 'daily', accountOpen: false }
+const dailyCalls = []
+let dailyAction = async () => { throw new Error('SYNTHETIC NO FIXTURE') }
+const dailyModules = loader({
+  vue: { ...vue, onMounted() {} },
+  '@/stores/liveWorkspace': { useLiveWorkspaceStore: () => dailyWorkspace },
+  '@/api/daily': {
+    getDailyReport: (date) => { dailyCalls.push(['get', date]); return dailyAction() },
+    generateDailyReport: (date) => { dailyCalls.push(['generate', date]); return dailyAction() },
+  },
+})
+const DailyApiError = dailyModules('@/request').ApiError
+const dailyReport = { report_date: '2026-12-01', status: 'ready', degraded: false, data_source: 'mock', workflow_version: '2026-11-24.daily-companion.2', summary: { title: 'SYNTHETIC DAILY TITLE', greeting: 'SYNTHETIC GREETING', highlights: ['SYNTHETIC HIGHLIGHT'], health_connections: [], gentle_reminders: ['SYNTHETIC REMINDER'], tomorrow_actions: ['SYNTHETIC ACTION'], closing: 'SYNTHETIC CLOSING', limitations: 'SYNTHETIC LIMITATION' }, data_quality: { wear_minutes: 600 }, used_record_ids: ['ep12'], created_at: '2026-12-01 21:00:00', updated_at: '2026-12-01 21:00:00' }
+const dailyScope = vue.effectScope()
+const daily = dailyScope.run(() => dailyModules('@/components/QDailyReport.vue').default.setup({}, { expose() {} }))
+dailyAction = async () => clone(dailyReport)
+await daily.load()
+assert.equal(daily.state.value, 'ready')
+assert.equal(dailyCalls[0][0], 'get', 'The pane reads the current report on load')
+assert.deepEqual(Array.from(daily.badges.value, (badge) => badge.label), ['模拟数据演示'], 'A mock report must carry the visible demo badge')
+assert.deepEqual(Array.from(daily.blocks.value, (block) => block.key), ['highlights', 'gentle_reminders', 'tomorrow_actions'], 'Absent and empty blocks must not render')
+assert.equal(daily.heading.value, 'SYNTHETIC DAILY TITLE')
+assert.equal(daily.greeting.value, 'SYNTHETIC GREETING')
+assert.equal(daily.limitation.value, 'SYNTHETIC LIMITATION')
+assert.match(daily.meta.value, /2026-11-24\.daily-companion\.2/)
+dailyAction = async () => ({ ...clone(dailyReport), status: 'degraded', degraded: true, data_source: 'device' })
+await daily.load()
+assert.deepEqual(Array.from(daily.badges.value, (badge) => badge.label), ['降级小结'], 'A degraded report must show its own marker')
+dailyAction = async () => ({ ...clone(dailyReport), summary: null })
+await daily.load()
+assert.equal(daily.state.value, 'review', 'A row without summary must not throw and falls back to the review state')
+assert.equal(daily.blocks.value.length, 0, 'review_required must not render activity or tomorrow items')
+assert.equal(daily.emptyState.value.title, '今天的小结需要人工核实，这不替代急诊处理')
+assert.equal(daily.emptyState.value.action, null, 'review_required offers no generate action')
+assert.equal(daily.heading.value, '每日小结')
+assert.equal(daily.limitation.value, '单日设备变化不能判断疾病好转或恶化，请以自己的感受和医生意见为准。', 'The standing disclaimer shows even without a summary')
+dailyAction = async () => { throw new DailyApiError(5001, 'SYNTHETIC MESSAGE') }
+await daily.load()
+assert.equal(daily.state.value, 'missing', 'A missing report is an empty state, not an error')
+assert.equal(daily.emptyState.value.action.label, '生成今日小结')
+assert.equal(daily.error.value, '')
+dailyAction = async () => clone(dailyReport)
+daily.handleAction()
+await settle()
+assert.equal(dailyCalls.at(-1)[0], 'generate', 'The empty state action generates the first report')
+assert.equal(daily.state.value, 'ready')
+for (const [code, state, title] of [[5002, 'insufficient', '今天记录不足，先不生成小结'], [5003, 'review', '今天的小结需要人工核实，这不替代急诊处理'], [5004, 'invalid', '这次生成没有通过输入校验']]) {
+  dailyAction = async () => { throw new DailyApiError(code, 'SYNTHETIC MESSAGE') }
+  await daily.load()
+  assert.equal(daily.state.value, state, `Code ${code} maps to its local empty state`)
+  assert.equal(daily.emptyState.value.title, title)
+  assert.equal(daily.emptyState.value.action, null)
+  assert.equal(daily.error.value, '', `Code ${code} must not surface the server message`)
+  assert.equal(daily.blocks.value.length, 0)
+}
+dailyAction = async () => { throw new Error('SYNTHETIC DAILY TRANSPORT') }
+await daily.load()
+assert.equal(daily.state.value, 'error')
+assert.match(daily.error.value, /TRANSPORT/)
+let releaseDaily
+dailyAction = () => new Promise((resolve) => { releaseDaily = () => resolve(clone(dailyReport)) })
+const pendingDaily = daily.load()
+dailyWorkspace.auth.user = null; dailyWorkspace.auth.isLoggedIn = false
+releaseDaily()
+await pendingDaily
+await settle()
+assert.equal(daily.state.value, 'idle', 'A report that arrives after logout must not render')
+assert.equal(daily.report.value, null)
+dailyScope.stop()
+assert.match(await renderComponent('QDailyReport', {}, {
+  '@/stores/liveWorkspace': { useLiveWorkspaceStore: () => ({ auth: { isLoggedIn: false }, activeTab: 'daily', accountOpen: false }) },
+  '@/api/daily': {},
+}), /登录后查看今天的小结/)
+const navApp = setup('pages/chat/index')
+await navApp.store.initialize()
+assert.deepEqual(Array.from(navApp.component.navigationTabs, (tab) => tab.id), ['chat', 'archive', 'plans', 'daily'], 'The mobile navigation must expose all four workspace tabs')
+navApp.store.openWorkspace('daily')
+await settle()
+assert.equal(navApp.component.pageTitle.value, '每日小结')
+assert.equal(navApp.routes.at(-1), '/pages/daily/index', 'Opening the daily tab must route to its page')
+navApp.stop()
 class Button { disabled = false; clicks = 0; hasAttribute() { return this.disabled } click() { this.clicks += 1 } }
 const keyboard = loader({}, { HTMLElement: Button })('@/components/buttonKeyboard')
 const control = new Button()
@@ -412,4 +495,4 @@ for (const key of ['Enter', ' ', 'Tab']) keyboard.activateButton({ key, currentT
 control.disabled = true
 keyboard.activateButton({ key: 'Enter', currentTarget: control, preventDefault() {} })
 assert.equal(control.clicks, 2)
-console.log('Live interaction checks passed: authentication, SSE, message flight, retries, archive filters and pagination, reminder requests, medication status, review data and logout isolation.')
+console.log('Live interaction checks passed: authentication, SSE, message flight, retries, archive filters and pagination, reminder requests, medication status, review data, daily report states and logout isolation.')
