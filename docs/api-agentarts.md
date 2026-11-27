@@ -1,16 +1,16 @@
 # 清诉工作流 API 对接
 
-更新日期：2026-11-24。
+更新日期：2026-11-26。
 
 本文件定义后端调用四个AgentArts工作流的接口、请求示例和响应处理。2026-11-24新增每日健康关怀，详见16.8；保留原三条工作流契约。与[清诉业务API文档](api.md)配套：本文引用的第1–15节均指该文档中的公开业务API，本文件保留第16节编号以便对照。
 
 实际凭据与鉴权实现已单独放入《鉴权信息-仅后端.md》，由负责人私下交付。本文件和公开示例包不包含明文密钥。拆分是为了分别维护与交接；实际发送请求仍要由后端注入认证信息。
 
 
-## 本次交接变更（2026-11-24）
+## 交接变更记录
 
 - **Triage 已切换到 `Triage-Workflow-IO6-Issue31Fix`（`2026-11-26.mainflow-io.6.issue31.1`，request.v2 / workflow.v2）：原文进、理解出，见 16.3-v2**。后端预提取与追问模板随之退役；Profile 与 Followup 维持 `.2`，Daily 协议保留尚未接入。前身 RouteSafe 运行时（`agent-arts-5f50106a25aa496abf99dfd7c362e5c6`）已于 2026-11-26 通过 HTTP 鉴权并执行 22 景回归（4 败为平台侧 Merge 过拒，见 issue #31），现运行时 `agent-arts-c0c1711a193e454cb169a2091be6d0e9` 复测 14/14 零 4004。
-- Triage 保留原运行时 URL。截图显示控制台“已提交／保存于 2026-11-24 10:47:51”，但未显示最终 `workflow_version`，不能仅凭截图认定发布接口已运行修订版；按下方版本表核对实际终态。
+- Triage 运行时 URL 已于 2026-11-26 随 Issue31Fix 交接更换；2026-11-24 那次交接时仍用原 RouteSafe 运行时 URL，其截图未显示最终 `workflow_version`，该条已由 16.3-v2 验收状态取代。
 - 补齐数字／区间时长、第二轮补问用药以及 `missing_fields / unknown_fields / insufficient_evidence` 的判定约定，详见 16.3.4.1。
 - 截图中的 `query: 你好` 是平台通用示例。本项目统一传 `inputs.request_json` 字符串；调试框粘贴内层业务 JSON，不额外加引号。会话 ID 由后端生成，不能复用截图常量。
 - 原三条工作流的 28 组合成测试已通过本地原生代码入口／分支检查；未据此宣称发布 URL、知识检索和模型输出已验收。Daily 的控制台结果沿用附件记录，本次没有另行运行或调用。
@@ -20,11 +20,11 @@
 
 更新日期：2026-11-24。本节在配套业务API第1–15节的前后端 HTTP 契约之外，补充**后端 → AgentArts**的内部契约。前端仍只调用清诉自己的 `/api`，不接触平台密钥、模型原文、内部证据池或平台执行事件。
 
-本节保留原三条工作流契约，Daily调用路径、协议与控制台ready状态按本次附件记载。当前附件未包含Daily DSL或完整25项填值文件，不能声称已核对其代码。**本次未使用密钥请求发布URL，HTTP/SSE联调仍需核对。** 各工作流预期版本如下：
+本节保留原三条工作流契约，Daily调用路径、协议与控制台ready状态按本次附件记载。当前附件未包含Daily DSL或完整25项填值文件，不能声称已核对其代码。**Triage 的 HTTP/SSE 联调已于 2026-11-26 实测通过（见 16.3-v2 验收状态）；Daily 的发布 URL 本次未用密钥请求，仍需核对。** 各工作流预期版本如下：
 
 | 工作流 | 请求 schema_version | 响应 schema_version | 本地交付 workflow_version |
 | --- | --- | --- | --- |
-| Triage-Workflow-IO6-RouteSafe | `clear-complaint.triage.request.v2` | `clear-complaint.triage.workflow.v2` | `2026-11-26.mainflow-io.6` |
+| Triage-Workflow-IO6-Issue31Fix | `clear-complaint.triage.request.v2` | `clear-complaint.triage.workflow.v2` | `2026-11-26.mainflow-io.6.issue31.1` |
 | Profile-Intake-Workflow | `clear-complaint.profile-intake.request.v1` | `clear-complaint.profile-intake.workflow.v1` | `2026-11-24.profile-intake.2` |
 | Followup-Supplement-Workflow | `clear-complaint.followup-supplement.request.v1` | `clear-complaint.followup-supplement.workflow.v1` | `2026-11-24.followup-supplement.2` |
 | Daily-Health-Companion-Workflow | `clear-complaint.daily-companion.request.v1` | `clear-complaint.daily-companion.workflow.v1` | `2026-11-24.daily-companion.2` |
@@ -253,7 +253,7 @@ async def invoke_workflow(
 ### 16.3 Triage-Workflow-MainFlow（v1 契约基线，已被 16.3-v2 取代）
 
 > 本节保留为 v1/io.4–io.5 时期的联调记录与字段对照基线。现行契约为 16.3-v2
-> （`Triage-Workflow-IO6-RouteSafe`，request.v2 / workflow.v2），历史细节仅供核对。
+> （`Triage-Workflow-IO6-Issue31Fix`，request.v2 / workflow.v2），历史细节仅供核对。
 
 用途：后端完成归一化、固定字段澄清和红旗检查后，调用本工作流检索资料、生成结构化草稿并做本轮工程校验。前端继续使用第 5 节的业务接口，不直接调用平台。
 
@@ -455,9 +455,9 @@ async def invoke_workflow(
 
 工作流没有跨调用记忆，不返回旧版 `next_state_json`。后端负责身份归属、已答字段、问题轮次、请求幂等、当前状态、草稿、证据与核验记录的持久化和恢复。第 5.10 节结果页受限问答为待实现设计，约定只使用已核验引用及模板，不重新检索、不调用本工作流、不改定档；新症状需重新评估时走新问诊。
 
-### 16.3-v2 Triage-Workflow-IO6-RouteSafe（request.v2，原文进、理解出）
+### 16.3-v2 Triage-Workflow-IO6-Issue31Fix（request.v2，原文进、理解出）
 
-来源：2026-11-26 平台交接《API 交接文档（仅变化）》与 issue #23 契约确认稿；联调用例包 16 组 23 景（`Triage-io6-回归用例包`）。要点：
+来源：2026-11-26 平台交接《API 交接文档（仅变化）》与 issue #23 契约确认稿；联调用例包 16 组 23 景（`Triage-io6-回归用例包`）。契约与请求/响应 schema 自前身 `Triage-Workflow-IO6-RouteSafe`（`2026-11-26.mainflow-io.6`）沿用未变，Issue31Fix 只修理解合并的错误处理。要点：
 
 **请求差异（对 v1）**：`normalized` 七字段、`self_attribution`、`vitals_snapshot`、`env` 从输入删除，理解归工作流并由响应回填；新增 `answers`（累计原文台账，≤100 项、每项 text ≤4000 字符，`answer_id/question_id/action/text` 四项，主动补充 `question_id=null`）、`understanding`（上次响应原样回传，≤65536 序列化字符，自带 `episode_id` 时后端校验归属）、`history_context`（consultations ≤60 条每条 summary ≤800 字符 + medications ≤40 条 id/name/status，后端组装）、`base_revision`（可信修订基准，迟到结果拒收）；`clarification` 改为 `asked_count/limit/skipped`（初始周期 10 问、每修订周期 5 问，唯一问题计，unknown/skip 计入，重试不计数）。`profile_snapshot.sex` 接受 `male/female/other/unknown`，公开档案的 `undisclosed` 由后端适配为 `unknown`。`complaint_text` 平台侧放宽到 4000 字符（公开 API 保持 500）。未知顶层字段拒绝。
 

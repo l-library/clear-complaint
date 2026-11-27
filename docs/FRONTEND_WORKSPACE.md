@@ -6,7 +6,7 @@
 
 | 页面 | 路由 | 可选参数 |
 | --- | --- | --- |
-| 默认入口（跳转到 AI 对话） | `/pages/index/index` | 无 |
+| 默认入口（渲染 `QWorkspace` 的 landing 屏，不跳转） | `/pages/index/index` | 无 |
 | AI 对话 | `/pages/chat/index` | `conversation_id`；随访使用 `reminder_id` 和 `date` |
 | 健康档案 | `/pages/health-records/index` | 无 |
 | 健康计划 | `/pages/health-plans/index` | `tab=all`、`tab=follow_up` 或 `tab=medication` |
