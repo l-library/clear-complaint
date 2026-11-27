@@ -997,7 +997,7 @@ data: {"episode_id":9001,"stage":"normalize","text":"正在理解你的描述","
   "status": "ready",
   "degraded": false,
   "data_source": "mock",
-  "workflow_version": "2026-11-28.daily-companion.3",
+  "workflow_version": "2026-11-24.daily-companion.2",
   "summary": {
     "title": "今天的健康小结",
     "greeting": "今天辛苦了，我们一起回看设备留下的记录。",
