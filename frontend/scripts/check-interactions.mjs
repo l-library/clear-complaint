@@ -431,7 +431,7 @@ assert.deepEqual(Array.from(daily.blocks.value, (block) => block.key), ['highlig
 assert.equal(daily.heading.value, 'SYNTHETIC DAILY TITLE')
 assert.equal(daily.greeting.value, 'SYNTHETIC GREETING')
 assert.equal(daily.limitation.value, 'SYNTHETIC LIMITATION')
-assert.match(daily.meta.value, /2026-11-24\.daily-companion\.2/)
+assert.doesNotMatch(daily.meta.value, /2026-11-24\.daily-companion\.2/, 'Internal workflow versions must not be shown to users')
 dailyAction = async () => ({ ...clone(dailyReport), status: 'degraded', degraded: true, data_source: 'device' })
 await daily.load()
 assert.deepEqual(Array.from(daily.badges.value, (badge) => badge.label), ['降级小结'], 'A degraded report must show its own marker')

@@ -443,8 +443,8 @@ watch([messageCount, pending, activeTab, () => activeConversation.value?.id], as
 .loading-dots text:nth-child(3) { animation-delay: .28s; }
 .message-end { height: 1px; }
 .conversation-composer { --composer-height: calc(173 * var(--u)); padding-top: 18px; flex-shrink: 0; }
-.conversation-tools { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-bottom: max(10px, calc(20 * var(--u))); font-size: clamp(11px, calc(16 * var(--u)), 18px); color: var(--muted); }
-.conversation-daily-link { flex-shrink: 0; margin: 0; padding: 5px 0; background: transparent; color: var(--accent); font-size: inherit; line-height: 1.5; }
+.conversation-tools { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px 15px; margin-bottom: max(10px, calc(20 * var(--u))); font-size: clamp(11px, calc(16 * var(--u)), 18px); color: var(--muted); }
+.conversation-daily-link { display: inline-flex; align-items: center; flex-shrink: 0; min-height: 32px; margin: 0; padding: 5px 0; background: transparent; color: var(--accent); font-size: inherit; line-height: 1.5; }
 .context-column {
   --muted: #657064;
   --glass-surface: rgba(255, 255, 255, .42);
@@ -552,6 +552,7 @@ button:active { transform: scale(.97); }
   .message-assistant .message-bubble { padding-left: 0; }
   .assistant-identity { margin-bottom: 10px; }
   .conversation-tools { font-size: 10px; }
+  .conversation-daily-link { min-height: 44px; padding: 0; }
   .save-button { font-size: 12px; }
   .context-column { max-height: none; }
 }
