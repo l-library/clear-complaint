@@ -81,6 +81,8 @@ export interface EpisodeDetail {
     out_of_coverage?: boolean
     not_understood?: boolean
     crisis?: SafetyPayload | null
+    /** 删空不出档（约束四）：无档位无科室，前端据此渲染对应卡片 */
+    no_conclusion?: boolean
   } | null
 }
 

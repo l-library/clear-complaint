@@ -45,6 +45,10 @@
       <text class="live-preserve">{{ workspace.notice.text }}</text>
       <view class="live-actions"><button role="button" tabindex="0" @keydown="activateButton" class="live-primary" @click="workspace.retry">重新描述</button></view>
     </view>
+    <view v-if="workspace.noConclusionText" class="live-card">
+      <text class="live-subtitle">这次没有核验出有依据的结论</text>
+      <text class="live-preserve">{{ workspace.noConclusionText }}</text>
+    </view>
     <view v-if="workspace.error && !workspace.pending" class="live-actions"><button role="button" tabindex="0" @keydown="activateButton" class="live-secondary" @click="workspace.retry">重试／恢复问诊</button></view>
   </view>
 </template>

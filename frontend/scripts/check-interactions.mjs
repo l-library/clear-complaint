@@ -123,7 +123,12 @@ const profile = { name: 'SYNTHETIC USER', birth_date: '2000-01-01', sex: 'undisc
 const detail = { episode: { id: 71, status: 'clarifying', created_at: '2026-11-22 10:00:00', complaint_text: 'SYNTHETIC UI TEST', saved_at: null, expires_at: '2026-11-23 10:00:00', revision: 0 }, clarify: { asked_count: 1, limit: 10, skipped: false, pending: { question_id: 'q1', purpose: 'duration', text: 'SYNTHETIC QUESTION', can_skip: true } }, result: { triage: 'clinic', triage_label: '门诊', urgency_note: 'SYNTHETIC ONLY', department_primary: 'SYNTHETIC', department_secondary: null, conditions: [], prep: { bring: [], describe: [], go_now: [] }, disclaimer: 'SYNTHETIC ONLY' } }
 const clone = (value) => JSON.parse(JSON.stringify(value))
 const settle = async () => { for (let i = 0; i < 16; i += 1) { await Promise.resolve(); await vue.nextTick() } }
-function setup(route = 'pages/index/index') {
+// 删空不出档（约束四）：已存档、无 result、gate 只带标记，详情端点不带通知文案
+const noConclusionDetail = { ...clone(detail), result: null, clarify: null, gate: { citations_verified: 0, citations_dropped: 1, degraded: false, no_conclusion: true }, episode: { ...clone(detail).episode, status: 'saved', saved_at: '2026-11-22 10:00:00' } }
+// 与后端 compose.NO_CONCLUSION_NOTICE 逐字一致的合成流式载荷
+const noConclusionNotice = '这次没能核验出有依据的结论，不提供分诊档位与就诊科室。可以补充更多细节（哪里不舒服、什么时候开始、有没有伴随表现）再发起一次；症状明显加重时请直接前往医院就诊。'
+function setup(route = 'pages/index/index', options = {}) {
+  const noConclusion = Boolean(options.noConclusion)
   const auth = vue.reactive({ user: { id: 1 }, isLoggedIn: true, ensureFreshSession: async () => true })
   let failCreate = false, detailResolver, delayedDetail = false
   const creations = [], routes = [], flights = [], answers = []
@@ -133,10 +138,16 @@ function setup(route = 'pages/index/index') {
     createEpisodeStream: async (complaint, event, city, key) => {
       creations.push({ complaint, key })
       if (failCreate) throw new Error('SYNTHETIC transport failure')
+      if (noConclusion) {
+        event({ event: 'stage', data: { episode_id: 71, text: 'SYNTHETIC stage' } })
+        event({ event: 'notice', data: { episode_id: 71, kind: 'no_conclusion', text: noConclusionNotice } })
+        event({ event: 'done', data: { episode_id: 71, triage: null, conditions_count: 0, gate: { citations_dropped: 1, no_conclusion: true, degraded: false } } })
+        return
+      }
       event({ event: 'stage', data: { episode_id: 71, text: 'SYNTHETIC stage' } })
       event({ event: 'question', data: { episode_id: 71, question_id: 'q1', purpose: 'duration', text: 'SYNTHETIC QUESTION', can_skip: true } })
     },
-    getEpisode: () => delayedDetail ? new Promise((resolve) => { detailResolver = resolve }) : Promise.resolve(clone(detail)),
+    getEpisode: () => delayedDetail ? new Promise((resolve) => { detailResolver = resolve }) : Promise.resolve(clone(noConclusion ? noConclusionDetail : detail)),
     clarifyEpisodeStream: async (id, answer, event) => { answers.push({ id, answer }); event({ event: 'question', data: { episode_id: id, question_id: 'q2', purpose: 'duration', text: 'SYNTHETIC NEXT', can_skip: true } }) }, retryEpisodeStream: async () => {},
   }
   const uni = {
@@ -273,6 +284,28 @@ const key = failed.creations[0].key
 await failed.store.retry()
 assert.equal(failed.creations[1].key, key, 'A network retry must reuse the original idempotency key')
 failed.stop()
+// 删空不出档（约束四）：notice 渲染、诚实占位、不再假承诺提醒、历史重开恢复
+const closed = setup('pages/chat/index', { noConclusion: true })
+await closed.store.initialize()
+closed.store.draft = 'SYNTHETIC NO CONCLUSION'
+closed.store.sendMessage()
+await settle()
+assert.equal(closed.store.result, null, 'A no-conclusion stream must not publish a result')
+assert.equal(closed.store.saved, true)
+assert.equal(closed.store.notice.kind, 'no_conclusion')
+assert.match(await renderComponent('QConsultationFlow', {}, { '@/stores/liveWorkspace': { useLiveWorkspaceStore: () => closed.store } }), /这次没能核验出有依据的结论/, 'The backend no-conclusion copy must render as a card')
+assert.equal(closed.component.composerPlaceholder.value, '本次问诊已结束，输入新的描述将开始新的问诊。', 'The closed state must promise a new consultation, not processing')
+assert.doesNotMatch(closed.component.composerPlaceholder.value, /正在整理/)
+closed.store.newConversation()
+assert.equal(closed.store.notice, null)
+assert.equal(await closed.store.openConversation('71'), true)
+await settle()
+assert.equal(closed.store.notice.kind, 'no_conclusion', 'Reopening a saved no-conclusion episode must restore the notice from the gate flag alone')
+assert.match(closed.store.noConclusionText, /不提供分诊档位与就诊科室/, 'The reopen path renders the mirrored deterministic copy')
+closed.stop()
+const workspaceSource = h5(readFileSync(new URL('components/QWorkspace.vue', src), 'utf8'))
+assert.doesNotMatch(workspaceSource, /安排了提醒/, 'The completed line must not promise a reminder the backend may not have created')
+assert.match(workspaceSource, /问诊完成，已保存至健康档案。/)
 const late = setup()
 await late.store.initialize()
 late.delay()
@@ -513,4 +546,4 @@ for (const key of ['Enter', ' ', 'Tab']) keyboard.activateButton({ key, currentT
 control.disabled = true
 keyboard.activateButton({ key: 'Enter', currentTarget: control, preventDefault() {} })
 assert.equal(control.clicks, 2)
-console.log('Live interaction checks passed: authentication, SSE, message flight, retries, archive filters and pagination, reminder requests, medication status, review data, daily report states and logout isolation.')
+console.log('Live interaction checks passed: authentication, SSE, message flight, retries, the no-conclusion card and honest composer copy, archive filters and pagination, reminder requests, medication status, review data, daily report states and logout isolation.')
