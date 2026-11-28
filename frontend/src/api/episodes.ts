@@ -84,6 +84,10 @@ export interface EpisodeDetail {
     /** 删空不出档（约束四）：无档位无科室，前端据此渲染对应卡片 */
     no_conclusion?: boolean
   } | null
+  /** 删空通知文案：后端 compose 下发的单一事实源，仅 gate.no_conclusion 时非空 */
+  no_conclusion_notice?: string | null
+  /** 归档时是否已建提醒（api.md 5.7）：保存行只在它为 true 时提提醒 */
+  reminder_created?: boolean
 }
 
 export interface EpisodeSummary {

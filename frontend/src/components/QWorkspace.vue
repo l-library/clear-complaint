@@ -115,7 +115,7 @@
               </scroll-view>
               <view class="conversation-composer">
                 <view class="conversation-tools">
-                  <text>{{ isFollowUp ? '提交后保存本次随访' : saved ? '问诊完成，已保存至健康档案。' : '问诊完成后自动保存至健康档案。' }}</text>
+                  <text>{{ savedLine }}</text>
                   <button v-if="saved && !isFollowUp" role="button" tabindex="0" @keydown="activateButton" class="conversation-daily-link" @click="navigate('daily')">查看今日小结</button>
                 </view>
                 <view v-if="isCompletedFollowUp" class="completed-conversation"><QIcon name="check" /><text>本次随访已完成，记录已归档。出现新的不适可以新建问诊。</text><button role="button" tabindex="0" @keydown="activateButton" @click="requestNewConversation">新建问诊</button></view>
@@ -177,6 +177,12 @@ const composerPlaceholder = computed(() => {
   if (pending.value) return '正在整理…'
   if (store.noConclusionText) return '本次问诊已结束，输入新的描述将开始新的问诊。'
   return '描述你的不适，或写下想了解的健康问题…'
+})
+// 保存行只在后端确实建了提醒时才提提醒（api.md 5.7 的 reminder_created）
+const savedLine = computed(() => {
+  if (isFollowUp.value) return '提交后保存本次随访'
+  if (!saved.value) return '问诊完成后自动保存至健康档案。'
+  return store.reminderCreated ? '问诊完成，已保存至健康档案，并按建议安排了提醒。' : '问诊完成，已保存至健康档案。'
 })
 const pageTitles: Record<WorkspaceTab, string> = { chat: 'AI 对话', archive: '健康档案', plans: '健康计划', daily: '每日小结' }
 const pageTitle = computed(() => activeTab.value === 'chat' ? activeConversation.value?.title || 'AI 对话' : pageTitles[activeTab.value])

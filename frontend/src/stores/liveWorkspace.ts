@@ -15,10 +15,6 @@ export type WorkspaceTab = 'chat' | 'archive' | 'plans' | 'daily'
 
 interface Message { id: string; role: 'user' | 'assistant'; content: string }
 
-/** 删空不出档（约束四）通知文案：与后端 episode/compose.NO_CONCLUSION_NOTICE 逐字
- * 一致。详情端点只带 gate.no_conclusion 标记不带文案，历史重开时用它兜底渲染
- * （N1b：考虑由后端在详情里下发原文）。改动需两处同步。 */
-const NO_CONCLUSION_NOTICE_TEXT = '这次没能核验出有依据的结论，不提供分诊档位与就诊科室。可以补充更多细节（哪里不舒服、什么时候开始、有没有伴随表现）再发起一次；症状明显加重时请直接前往医院就诊。'
 export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
   const auth = useAuthStore()
   const screen = ref<'landing' | 'workspace'>('landing')
@@ -50,11 +46,11 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
   let initialization: Promise<void> | null = null
   let lastRequest: { complaint: string; key: string } | null = null
   const saved = computed(() => Boolean(detail.value?.episode.saved_at))
+  const reminderCreated = computed(() => Boolean(detail.value?.reminder_created))
   const result = computed(() => detail.value?.result ?? null)
   const noConclusionText = computed(() => {
     if (result.value) return null
-    if (notice.value?.kind === 'no_conclusion') return notice.value.text
-    return detail.value?.gate?.no_conclusion ? NO_CONCLUSION_NOTICE_TEXT : null
+    return notice.value?.kind === 'no_conclusion' ? notice.value.text : null
   })
   const profile = computed(() => ({ name: patientProfile.value?.name || (auth.isLoggedIn ? '我的账户' : '未登录'), age: patientProfile.value?.age_years, description: auth.user?.phone || '登录后管理健康记录' }))
   const activeConversation = computed(() => episodeId.value ? ({ id: String(episodeId.value), title: detail.value?.episode.complaint_text || messages.value.find((item) => item.role === 'user')?.content || '新的问诊' }) : null)
@@ -117,11 +113,11 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
     }
     if (!pending) pendingQuestion.value = null
     safety.value = value.gate?.crisis || null
-    // 删空不出档（约束四）：历史重开没有 notice 事件，按 gate 标记补回通知卡片；
-    // 打开别的问诊时清掉残留的删空卡片，避免跨问诊串显
-    if (!value.result && value.gate?.no_conclusion) {
-      if (notice.value?.kind !== 'no_conclusion') notice.value = { kind: 'no_conclusion', text: NO_CONCLUSION_NOTICE_TEXT }
-    } else if (notice.value?.kind === 'no_conclusion') {
+    // 删空不出档（约束四）：历史重开没有 notice 事件，用详情下发的文案补回通知卡片
+    // （文案只有一个事实源：后端 compose）；打开别的问诊时清掉残留的删空卡片，避免跨问诊串显
+    if (!value.result && value.gate?.no_conclusion && value.no_conclusion_notice) {
+      if (notice.value?.kind !== 'no_conclusion') notice.value = { kind: 'no_conclusion', text: value.no_conclusion_notice }
+    } else if (notice.value?.kind === 'no_conclusion' && (value.result || !value.gate?.no_conclusion)) {
       notice.value = null
     }
   }
@@ -260,7 +256,7 @@ export const useLiveWorkspaceStore = defineStore('live-workspace', () => {
   }
   watch(() => auth.user?.id, () => { reset(); if (auth.isLoggedIn) void initialize() })
   return { auth, screen, activeTab, draft, messages, pending, error, stage, patientProfile, detail, result, episodeId,
-    pendingQuestion, answerText, safety, notice, noConclusionText, saved, profile, activeConversation, recentConversations, history, historyTotal, historyPage,
+    pendingQuestion, answerText, safety, notice, noConclusionText, saved, reminderCreated, profile, activeConversation, recentConversations, history, historyTotal, historyPage,
     accountOpen, initialized, readyToSend, selectedPlanTab,
     followUpReminder, followUpAnswers, followUpNote, followUpResponse, startFollowUp, submitFollowUp,
     initialize, loadHistory, openWorkspace, newConversation, openConversation, sendMessage, submitAnswer, retry, reset }

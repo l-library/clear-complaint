@@ -183,7 +183,7 @@
 }
 ```
 
-`quote` 为逐字摘录，先对照原分片核验，再截取最多 120 字符；内部保留截断标记，省略号只在展示时追加，不写入待核验的摘录。`evidence` 至少一条，核验不通过的情况不会出现在结果里。平台到后端的转换见《[api-agentarts.md](api-agentarts.md)》16.3 节。
+`quote` 为逐字摘录，先对照原分片核验，再截取最多 120 字符；内部保留截断标记，省略号只在展示时追加，不写入待核验的摘录。`evidence` 至少一条，核验不通过的情况不会出现在结果里。`doc_title` 为展示名：文件名式的来源（如 `1645425822651_51288.pdf`）按后端冻结表折为人文标题，表外值原样透传。平台到后端的转换见《[api-agentarts.md](api-agentarts.md)》16.3 节。
 
 ### 2.8 Result
 
@@ -286,6 +286,8 @@
 - `profile_snapshot` 与 `vitals_snapshot` 是生成时的事实快照，之后修改档案不影响它。
 - `env` 在取不到环境信息时为 `null`。
 - `qa_turns` 为该问诊的受限问答记录，按时间正序，结构见 2.14；只读。
+- `no_conclusion_notice` 只在 `gate.no_conclusion=true` 时为删空通知文案（与流式 `notice` 事件同文），否则为 `null`；前端据此渲染，不再镜像后端文案。
+- `reminder_created` 表示归档时是否已建提醒（见 5.7），急诊档与无提醒出口为 `false`。
 
 ### 2.12 单问协议与回答（io.6 / request.v2）
 
@@ -525,6 +527,9 @@ SSE `question` 事件（详情 `clarify.pending` 同构）：
 | `self_observe` | 建随访提醒，`created_at` + 48 小时 |
 | `clinic` | 建复查提醒，`created_at` + 3 天的 09:00（策略在后端，前端不再选日期） |
 | `emergency` | 只归档，不建提醒 |
+| 无结论出口（`gate.no_conclusion`） | 不发任何档位，但复用自我观察的随访规则建一条复评提醒（随访在此状态可达） |
+
+归档结果通过详情 `reminder_created` 与 `done` 事件的同名字段暴露：前端只在它为 `true` 时说「已按建议安排了提醒」。
 
 归档即 `status=saved` 且 `saved_at` 置位；幂等重放不重复归档、不翻倍提醒，已有待处理提醒保持原样。未走完的问诊（`generating`/`clarifying`/`failed`）不归档，到期由清理任务物理删除。
 
@@ -604,7 +609,7 @@ SSE `question` 事件（详情 `clarify.pending` 同构）：
 | `question` | `{ episode_id, round, round_limit, missing_fields, questions }` | 需要追问时下发，之后流结束 |
 | `citation` | `{ episode_id, items }` | 引用池，元素为 `{doc_title, section, quote}` |
 | `result_section` | `{ episode_id, section, payload }` | `section` ∈ `triage`/`department`/`conditions`/`prep`/`disclaimer` |
-| `done` | `{ episode_id, triage, conditions_count, gate, degraded }` | 正常结束 |
+| `done` | `{ episode_id, triage, conditions_count, gate, degraded, reminder_created }` | 正常结束；`reminder_created` 见 5.7 |
 | `error` | `{ episode_id, code, message, retryable }` | 失败结束，`code` 见第 12 节 |
 | `heartbeat` | `{ ts }` | 空闲每 15 秒发送一次 |
 
