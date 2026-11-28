@@ -62,7 +62,10 @@ async def download_export(token: str, session: SessionDep) -> FileResponse:
         path,
         media_type="application/zip",
         filename="clear-complaint-export.zip",
-        headers={"Content-Disposition": 'attachment; filename="clear-complaint-export.zip"'},
+        headers={
+            "Content-Disposition": 'attachment; filename="clear-complaint-export.zip"',
+            "Cache-Control": "no-store",
+        },
     )
 
 
