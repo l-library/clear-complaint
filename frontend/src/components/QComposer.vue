@@ -18,8 +18,8 @@
       />
       <view class="composer-bottom">
         <view class="composer-controls">
-          <button role="button" tabindex="0" @keydown="activateButton" v-if="compact" class="utility-button" aria-label="添加健康资料" @click="$emit('attach')"><QIcon name="plus" /></button>
-          <button role="button" tabindex="0" @keydown="activateButton" class="privacy-button" :class="{ 'utility-button': compact, 'anonymous': !compact }" aria-label="账户与隐私说明" @click="showPrivacy"><QIcon name="anonymous" /><text v-if="!compact">隐私保护</text></button>
+          <button role="button" tabindex="0" @keydown="activateButton" v-if="compact" class="utility-button" aria-label="查看健康档案" @click="$emit('openArchive')"><QIcon name="file" /></button>
+          <button role="button" tabindex="0" @keydown="activateButton" v-if="!compact" class="privacy-button anonymous" aria-label="账户与隐私说明" @click="showPrivacy"><QIcon name="anonymous" /><text>隐私保护</text></button>
         </view>
         <button role="button" tabindex="0" @keydown="activateButton" class="send-button" :class="{ 'send-round': compact }" :disabled="pending" :aria-label="pending ? '正在整理' : '发送消息'" @click="$emit('send')">
           <text v-if="!compact">{{ pending ? '正在整理…' : '开始交流' }}</text>
@@ -48,7 +48,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
   (e: 'send'): void
-  (e: 'attach'): void
+  (e: 'openArchive'): void
 }>()
 const focused = ref(false)
 
