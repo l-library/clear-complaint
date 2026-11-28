@@ -115,11 +115,11 @@
               </scroll-view>
               <view class="conversation-composer">
                 <view class="conversation-tools">
-                  <text>{{ isFollowUp ? '提交后保存本次随访' : saved ? '问诊完成，已保存至健康档案，并按建议安排了提醒。' : '问诊完成后自动保存至健康档案。' }}</text>
+                  <text>{{ isFollowUp ? '提交后保存本次随访' : saved ? '问诊完成，已保存至健康档案。' : '问诊完成后自动保存至健康档案。' }}</text>
                   <button v-if="saved && !isFollowUp" role="button" tabindex="0" @keydown="activateButton" class="conversation-daily-link" @click="navigate('daily')">查看今日小结</button>
                 </view>
                 <view v-if="isCompletedFollowUp" class="completed-conversation"><QIcon name="check" /><text>本次随访已完成，记录已归档。出现新的不适可以新建问诊。</text><button role="button" tabindex="0" @keydown="activateButton" @click="requestNewConversation">新建问诊</button></view>
-                <QComposer v-else ref="replyComposer" v-model="draft" compact :context-label="isFollowUp ? '随访回复' : '问诊交流'" :placeholder="isFollowUp ? '随访补充说明…' : store.result ? '补充新情况，会更新这份建议…' : (store.pendingQuestion ? '回答上方的问题…' : '正在整理…')" :pending="pending" :error="error" @send="handleSend" @attach="navigate('archive')" />
+                <QComposer v-else ref="replyComposer" v-model="draft" compact :context-label="isFollowUp ? '随访回复' : '问诊交流'" :placeholder="composerPlaceholder" :pending="pending" :error="error" @send="handleSend" @attach="navigate('archive')" />
                 <text class="medical-note">健康信息整理，不构成诊断。</text>
               </view>
             </view>
@@ -168,6 +168,16 @@ const messageScrollTop = ref(0)
 const messageCount = computed(() => messages.value.length)
 const isFollowUp = computed(() => Boolean(store.followUpReminder))
 const isCompletedFollowUp = computed(() => Boolean(store.followUpReminder && store.followUpReminder.status !== 'pending'))
+// 占位文案必须与 sendMessage 的真实行为一致：无结论已存档时输入会开新问诊，
+// 「正在整理…」只在等待流式响应时出现
+const composerPlaceholder = computed(() => {
+  if (isFollowUp.value) return '随访补充说明…'
+  if (store.result) return '补充新情况，会更新这份建议…'
+  if (store.pendingQuestion) return '回答上方的问题…'
+  if (pending.value) return '正在整理…'
+  if (store.noConclusionText) return '本次问诊已结束，输入新的描述将开始新的问诊。'
+  return '描述你的不适，或写下想了解的健康问题…'
+})
 const pageTitles: Record<WorkspaceTab, string> = { chat: 'AI 对话', archive: '健康档案', plans: '健康计划', daily: '每日小结' }
 const pageTitle = computed(() => activeTab.value === 'chat' ? activeConversation.value?.title || 'AI 对话' : pageTitles[activeTab.value])
 const navigationTabs: { id: WorkspaceTab; title: string; icon: string }[] = [
