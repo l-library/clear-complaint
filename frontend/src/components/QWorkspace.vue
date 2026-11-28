@@ -26,7 +26,7 @@
           <text class="intro-detail">记录症状、管理健康档案，及时回顾每一次变化。</text>
         </view>
         <view class="landing-composer">
-          <QComposer v-model="draft" label="今天有什么想告诉我？" placeholder="描述你的不适，或写下想了解的健康问题…" :error="error" :pending="pending" @send="handleSend" @attach="navigate('archive')" />
+          <QComposer v-model="draft" label="今天有什么想告诉我？" placeholder="描述你的不适，或写下想了解的健康问题…" :error="error" :pending="pending" @send="handleSend" @open-archive="navigate('archive')" />
           <view class="composer-footnote">
             <text>登录后可保存咨询记录</text>
             <view><QIcon name="shield" /><text>仅供健康信息整理</text></view>
@@ -93,8 +93,7 @@
             </view>
             <view class="chat-entry-composer">
               <button role="button" tabindex="0" @keydown="activateButton" class="record-connector" @click="navigate('archive')"><text>查看我的健康档案</text><QIcon name="arrow-right" /></button>
-              <QComposer ref="entryComposer" v-model="draft" compact placeholder="描述你的不适，或写下想了解的健康问题…" :error="error" :pending="pending" @send="handleSend" @attach="navigate('archive')" />
-              <text class="medical-note">健康信息整理，不能替代医生诊断。</text>
+              <QComposer ref="entryComposer" v-model="draft" compact placeholder="描述你的不适，或写下想了解的健康问题…" :error="error" :pending="pending" @send="handleSend" @open-archive="navigate('archive')" />
             </view>
             <view class="quick-start"><view class="prompt-list"><button role="button" tabindex="0" @keydown="activateButton" v-for="prompt in prompts" :key="prompt.title" class="prompt-chip" @click="choosePrompt(prompt.content)"><text>{{ prompt.title }}</text></button></view></view>
           </view>
@@ -119,8 +118,7 @@
                   <button v-if="saved && !isFollowUp" role="button" tabindex="0" @keydown="activateButton" class="conversation-daily-link" @click="navigate('daily')">查看今日小结</button>
                 </view>
                 <view v-if="isCompletedFollowUp" class="completed-conversation"><QIcon name="check" /><text>本次随访已完成，记录已归档。出现新的不适可以新建问诊。</text><button role="button" tabindex="0" @keydown="activateButton" @click="requestNewConversation">新建问诊</button></view>
-                <QComposer v-else ref="replyComposer" v-model="draft" compact :context-label="isFollowUp ? '随访回复' : '问诊交流'" :placeholder="composerPlaceholder" :pending="pending" :error="error" @send="handleSend" @attach="navigate('archive')" />
-                <text class="medical-note">健康信息整理，不构成诊断。</text>
+                <QComposer v-else ref="replyComposer" v-model="draft" compact :context-label="isFollowUp ? '随访回复' : '问诊交流'" :placeholder="composerPlaceholder" :pending="pending" :error="error" @send="handleSend" @open-archive="navigate('archive')" />
               </view>
             </view>
             <view v-if="!store.accountOpen" class="context-column">
@@ -433,7 +431,6 @@ watch([messageCount, pending, activeTab, () => activeConversation.value?.id], as
 .record-connector .q-icon { width: max(18px, calc(24 * var(--u))); height: max(18px, calc(24 * var(--u))); }
 .record-connector:hover { background: #f0f0eb; }
 .chat-entry-composer :deep(.composer-wrap) { position: relative; z-index: 1; }
-.medical-note { display: block; margin-top: max(9px, calc(14 * var(--u))); color: var(--muted); font-size: clamp(10px, calc(14 * var(--u)), 16px); line-height: 1.6; text-align: center; }
 .quick-start { margin-top: max(18px, calc(36 * var(--u))); animation: reveal .5s .22s ease both; }
 .prompt-list { display: flex; justify-content: center; flex-wrap: wrap; gap: max(7px, calc(12 * var(--u))); }
 .prompt-chip { margin: 0; padding: max(9px, calc(16 * var(--u))) max(12px, calc(24 * var(--u))); border-radius: max(9px, calc(12 * var(--u))); background: var(--surface-soft); color: var(--ink); font-size: clamp(11px, calc(20 * var(--u)), 24px); line-height: 1.3; }
@@ -556,7 +553,6 @@ button:active { transform: scale(.97); }
   .record-connector { font-size: 13px; }
   .prompt-list { gap: 7px; }
   .prompt-chip { font-size: 12px; padding: 11px 13px; }
-  .medical-note { font-size: 10px; }
   .mobile-nav { position: fixed; z-index: 35; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-around; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: #fdfdf7; }
   .mobile-nav button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 45px; padding: 5px 7px; margin: 0; background: transparent; border-radius: 12px; font-size: 10px; line-height: 1.3; color: var(--muted); }
   .mobile-nav .q-icon { width: 21px; height: 21px; opacity: .65; }
