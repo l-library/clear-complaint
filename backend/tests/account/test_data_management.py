@@ -105,6 +105,7 @@ def test_export_builds_and_downloads_once(
     # 下载不鉴权
     first = db_client.get(f"/api/export/{token}")
     assert first.status_code == 200
+    assert first.headers["cache-control"] == "no-store"
     assert first.headers["content-type"].startswith("application/zip")
     archive = zipfile.ZipFile(io.BytesIO(first.content))
     names = set(archive.namelist())

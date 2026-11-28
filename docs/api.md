@@ -848,7 +848,7 @@ data: {"episode_id":9001,"stage":"normalize","text":"正在理解你的描述","
 
 ### 11.2 `GET /api/export/{token}`
 
-按 11.1 返回的地址下载文件，无需 `Authorization`，凭不可猜测的 `token` 鉴权，过期或已使用返回 404。响应为 `application/zip` 附件。
+按 11.1 返回的地址下载文件，无需 `Authorization`，凭不可猜测的 `token` 鉴权，过期或已使用返回 404。响应为 `application/zip` 附件，携带 `Cache-Control: no-store`，浏览器不得缓存该 ZIP。
 
 ### 11.3 `DELETE /api/data`
 

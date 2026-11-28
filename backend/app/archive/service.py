@@ -68,6 +68,7 @@ def _check_vital_values(kind: str, values: Mapping[str, object]) -> dict[str, ob
             if limits is not None and field != "pulse":
                 raise BizException(ErrorCode.VITAL_OUT_OF_RANGE, f"{field} 不能为空")
             continue
+        # 声明类型是 object（update 会合并 ORM 的 Decimal），运行时是数字，float() 无法静态证明
         number = float(value)  # type: ignore[arg-type]
         if limits is not None and not limits[0] <= number <= limits[1]:
             raise BizException(
@@ -82,6 +83,7 @@ def _check_vital_values(kind: str, values: Mapping[str, object]) -> dict[str, ob
 
 def _vital_out(vital: Vital) -> dict[str, object]:
     def num(value: object) -> float | None:
+        # 形参声明为 object，运行时是 Numeric 列的 Decimal，float() 无法静态证明
         return float(value) if value is not None else None  # type: ignore[arg-type]
 
     return {
