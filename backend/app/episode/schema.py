@@ -52,6 +52,10 @@ class EpisodeDetail(BaseModel):
     # 结果修订历史（issue #23）：保留最近三版供回看
     result_history: list[dict[str, object]] = []
     disclaimer: str
+    # 删空通知文案（N1b）：仅 gate.no_conclusion 时非空，前端不再镜像后端文案
+    no_conclusion_notice: str | None = None
+    # 归档时是否已建提醒（api.md 5.7）：保存行只在它为 true 时提提醒
+    reminder_created: bool = False
 
 
 class PageData(BaseModel):

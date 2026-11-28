@@ -120,13 +120,13 @@ assert.equal(events[0].data.text, '合成中文🗣️')
 assert.equal(events[1].data.episode_id, 71)
 assert.throws(() => parseModule.createSseParser(() => {}).push('event: done\ndata: invalid\n\n'), /格式/)
 const profile = { name: 'SYNTHETIC USER', birth_date: '2000-01-01', sex: 'undisclosed', city_code: null, age_years: 26, required_missing: [], conditions: null, allergies: null }
-const detail = { episode: { id: 71, status: 'clarifying', created_at: '2026-11-22 10:00:00', complaint_text: 'SYNTHETIC UI TEST', saved_at: null, expires_at: '2026-11-23 10:00:00', revision: 0 }, clarify: { asked_count: 1, limit: 10, skipped: false, pending: { question_id: 'q1', purpose: 'duration', text: 'SYNTHETIC QUESTION', can_skip: true } }, result: { triage: 'clinic', triage_label: '门诊', urgency_note: 'SYNTHETIC ONLY', department_primary: 'SYNTHETIC', department_secondary: null, conditions: [], prep: { bring: [], describe: [], go_now: [] }, disclaimer: 'SYNTHETIC ONLY' } }
+const detail = { episode: { id: 71, status: 'clarifying', created_at: '2026-11-22 10:00:00', complaint_text: 'SYNTHETIC UI TEST', saved_at: null, expires_at: '2026-11-23 10:00:00', revision: 0 }, clarify: { asked_count: 1, limit: 10, skipped: false, pending: { question_id: 'q1', purpose: 'duration', text: 'SYNTHETIC QUESTION', can_skip: true } }, result: { triage: 'clinic', triage_label: '门诊', urgency_note: 'SYNTHETIC ONLY', department_primary: 'SYNTHETIC', department_secondary: null, conditions: [], prep: { bring: [], describe: [], go_now: [] }, disclaimer: 'SYNTHETIC ONLY' }, reminder_created: true }
 const clone = (value) => JSON.parse(JSON.stringify(value))
 const settle = async () => { for (let i = 0; i < 16; i += 1) { await Promise.resolve(); await vue.nextTick() } }
-// 删空不出档（约束四）：已存档、无 result、gate 只带标记，详情端点不带通知文案
-const noConclusionDetail = { ...clone(detail), result: null, clarify: null, gate: { citations_verified: 0, citations_dropped: 1, degraded: false, no_conclusion: true }, episode: { ...clone(detail).episode, status: 'saved', saved_at: '2026-11-22 10:00:00' } }
-// 与后端 compose.NO_CONCLUSION_NOTICE 逐字一致的合成流式载荷
+// 与后端 compose.NO_CONCLUSION_NOTICE 逐字一致的合成载荷（两处合成响应共用）
 const noConclusionNotice = '这次没能核验出有依据的结论，不提供分诊档位与就诊科室。可以补充更多细节（哪里不舒服、什么时候开始、有没有伴随表现）再发起一次；症状明显加重时请直接前往医院就诊。'
+// 删空不出档（约束四）：已存档、无 result；详情下发删空文案与 reminder_created（后端 N1b）
+const noConclusionDetail = { ...clone(detail), result: null, clarify: null, no_conclusion_notice: noConclusionNotice, reminder_created: true, gate: { citations_verified: 0, citations_dropped: 1, degraded: false, no_conclusion: true }, episode: { ...clone(detail).episode, status: 'saved', saved_at: '2026-11-22 10:00:00' } }
 function setup(route = 'pages/index/index', options = {}) {
   const noConclusion = Boolean(options.noConclusion)
   const auth = vue.reactive({ user: { id: 1 }, isLoggedIn: true, ensureFreshSession: async () => true })
@@ -194,6 +194,11 @@ for (const route of ['pages/index/index', 'pages/chat/index']) {
   // 生成完成即自动归档（issue #24）：详情带 saved_at，没有任何保存请求要发
   app.store.detail.episode.saved_at = '2026-11-22 10:00:00'
   assert.equal(app.store.saved, true, 'A completed consult must read as archived')
+  // 保存行按后端事实说话：reminder_created 为真才提提醒（api.md 5.7）
+  assert.equal(app.component.savedLine.value, '问诊完成，已保存至健康档案，并按建议安排了提醒。', 'A save with reminder_created must say a reminder was scheduled')
+  app.store.detail.reminder_created = false
+  assert.equal(app.component.savedLine.value, '问诊完成，已保存至健康档案。', 'Without reminder_created the saved line must stay short')
+  app.store.detail.reminder_created = true
   // 结果后补充（修订）：问题答完（无挂起）时，sendMessage 沿用同一问诊
   app.store.pendingQuestion = null
   app.store.draft = '补充：还有点咳嗽'
@@ -256,7 +261,11 @@ const reviewHtml = await renderComponent('QEpisodeReview', reviewProps)
 assert.match(reviewHtml, /SYNTHETIC ATTRIBUTION/)
 assert.match(reviewHtml, /SYNTHETIC FLAG/)
 assert.match(reviewHtml, /本人暂不确定/)
+assert.match(reviewHtml, /需要尽快就医的警示信号/)
+assert.doesNotMatch(reviewHtml, /引用已核验|引用已剔除|命中的红旗规则|本次校验未记录红旗命中/, 'Gate counters and audit wording stay off the user surface')
 assert.doesNotMatch(reviewHtml, /待接入|待补充/)
+const quietHtml = await renderComponent('QEpisodeReview', vue.reactive({ detail: { ...clone(detail), gate: { citations_verified: 3, citations_dropped: 0 } }, pending: false }))
+assert.doesNotMatch(quietHtml, /警示信号|红旗/, 'No red flags renders nothing, not an audit announcement')
 reviewProps.detail = null
 assert.equal(review.fields.value.length, 0)
 assert.equal(review.hasGate.value, false)
@@ -293,6 +302,7 @@ await settle()
 assert.equal(closed.store.result, null, 'A no-conclusion stream must not publish a result')
 assert.equal(closed.store.saved, true)
 assert.equal(closed.store.notice.kind, 'no_conclusion')
+assert.equal(closed.component.savedLine.value, '问诊完成，已保存至健康档案，并按建议安排了提醒。', 'A no-conclusion save that created a followup reminder may truthfully mention it')
 assert.match(await renderComponent('QConsultationFlow', {}, { '@/stores/liveWorkspace': { useLiveWorkspaceStore: () => closed.store } }), /这次没能核验出有依据的结论/, 'The backend no-conclusion copy must render as a card')
 assert.equal(closed.component.composerPlaceholder.value, '本次问诊已结束，输入新的描述将开始新的问诊。', 'The closed state must promise a new consultation, not processing')
 assert.doesNotMatch(closed.component.composerPlaceholder.value, /正在整理/)
@@ -300,11 +310,13 @@ closed.store.newConversation()
 assert.equal(closed.store.notice, null)
 assert.equal(await closed.store.openConversation('71'), true)
 await settle()
-assert.equal(closed.store.notice.kind, 'no_conclusion', 'Reopening a saved no-conclusion episode must restore the notice from the gate flag alone')
-assert.match(closed.store.noConclusionText, /不提供分诊档位与就诊科室/, 'The reopen path renders the mirrored deterministic copy')
+assert.equal(closed.store.notice.kind, 'no_conclusion', 'Reopening a saved no-conclusion episode must restore the notice from the detail-provided copy')
+assert.match(closed.store.noConclusionText, /不提供分诊档位与就诊科室/, 'The reopen path renders the copy the detail endpoint provides')
 closed.stop()
+const storeSource = readFileSync(new URL('stores/liveWorkspace.ts', src), 'utf8')
+assert.doesNotMatch(storeSource, /这次没能核验出/, 'The frontend must not mirror backend copy: the detail endpoint is the single source of the notice text')
 const workspaceSource = h5(readFileSync(new URL('components/QWorkspace.vue', src), 'utf8'))
-assert.doesNotMatch(workspaceSource, /安排了提醒/, 'The completed line must not promise a reminder the backend may not have created')
+assert.match(workspaceSource, /已保存至健康档案，并按建议安排了提醒。/)
 assert.match(workspaceSource, /问诊完成，已保存至健康档案。/)
 const late = setup()
 await late.store.initialize()

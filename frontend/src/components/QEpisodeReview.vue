@@ -12,9 +12,7 @@
       <view class="review-section">
         <text class="live-label">校验记录</text>
         <template v-if="hasGate">
-          <view class="verification-row"><text>引用已核验</text><text>{{ gate?.citations_verified ?? '—' }}</text></view>
-          <view class="verification-row"><text>引用已剔除</text><text>{{ gate?.citations_dropped ?? '—' }}</text></view>
-          <view class="red-flag-list"><text class="live-muted">{{ gate?.red_flags?.length ? '命中的红旗规则' : '本次校验未记录红旗命中' }}</text><text v-for="flag in gate?.red_flags || []" :key="flag.rule_id" class="red-flag">{{ flag.name }}</text></view>
+          <view v-if="gate?.red_flags?.length" class="red-flag-list"><text class="live-muted">需要尽快就医的警示信号</text><text v-for="flag in gate?.red_flags" :key="flag.rule_id" class="red-flag">{{ flag.name }}</text></view>
           <text v-if="gate?.fallback || gate?.degraded" class="live-notice">本次采用了保守降级处理。</text>
           <text v-else-if="gate?.out_of_coverage" class="live-notice">资料库暂不覆盖此类表现，建议仅按紧急程度与科室参考。</text>
         </template>
@@ -50,7 +48,6 @@ const hasGate = computed(() => Boolean(gate.value && Object.keys(gate.value).len
 .normalized-fields { padding: 17px; border: 1px solid rgba(255,255,255,.9); border-radius: 18px; background: rgba(255,255,255,.48); }
 .normalized-field + .normalized-field { margin-top: 14px; }
 .attribution-note { margin-top: 9px; }
-.verification-row { display: flex; justify-content: space-between; gap: 15px; padding: 10px 0; border-bottom: 1px solid var(--glass-rule, #deded7); }
 .red-flag-list { margin-top: 15px; }
 .red-flag { display: block; margin-top: 8px; color: #a14136; }
 </style>

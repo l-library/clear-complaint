@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.account.models import Profile
-from app.agent import crisis, redflag
+from app.agent import crisis, doc_titles, redflag
 from app.agent.citation import Condition as CitationCondition
 from app.agent.citation import verify as verify_citations
 from app.agent.vocab import resolve as vocab_resolve
@@ -330,15 +330,21 @@ async def _archive_with_reminder(session: AsyncSession, episode: Episode) -> Non
 
     引用闸门在落库前已逐字核验，让用户再「核对」是免责仪式；复查提醒挂在
     手动归档上，没点弹窗的人就静默失去闭环。归档与提醒都改为完成时自动；
-    已有待处理提醒时保持原样（幂等重放不翻倍）。
+    已有待处理提醒时保持原样（幂等重放不翻倍）。no_conclusion 出口不发
+    任何档位（约束四），但复用自我观察的随访规则建一条复评提醒，随访在
+    这个状态才可达。
     """
     triage = str((episode.result or {}).get("triage", ""))
+    gate = dict(episode.gate or {})
+    if episode.result is None and gate.get("no_conclusion"):
+        triage = "self_observe"
     existing = await session.scalar(
         select(reminder_models.Reminder).where(
             reminder_models.Reminder.episode_id == episode.id,
             reminder_models.Reminder.status == reminder_models.STATUS_PENDING,
         )
     )
+    created = existing is not None
     if existing is None:
         reminder = create_episode_reminder(
             user_id=episode.user_id,
@@ -349,6 +355,9 @@ async def _archive_with_reminder(session: AsyncSession, episode: Episode) -> Non
         )
         if reminder is not None:
             session.add(reminder)
+            created = True
+    gate["reminder_created"] = created
+    episode.gate = gate
     if episode.status != STATUS_SAVED:
         episode.status = STATUS_SAVED
         episode.saved_at = now_shanghai()
@@ -839,7 +848,7 @@ async def _apply_draft(
                 verified += 1
                 evidence.append(
                     {
-                        "doc_title": str(item.get("doc_title", "")),
+                        "doc_title": doc_titles.display_name(str(item.get("doc_title", ""))),
                         "section": str(item.get("section", "")),
                         "quote": str(item.get("quote", "")),
                     }
@@ -964,6 +973,7 @@ async def _broadcast_tail(
                 "conditions_count": 0,
                 "gate": _gate_public(gate),
                 "degraded": False,
+                "reminder_created": _reminder_created(gate),
             },
         )
         return
@@ -984,6 +994,7 @@ async def _broadcast_tail(
                 "conditions_count": 0,
                 "gate": _gate_public(gate),
                 "degraded": False,
+                "reminder_created": _reminder_created(gate),
             },
         )
         return
@@ -1005,6 +1016,7 @@ async def _broadcast_tail(
                 "conditions_count": 0,
                 "gate": _gate_public(gate),
                 "degraded": False,
+                "reminder_created": _reminder_created(gate),
             },
         )
         return
@@ -1073,6 +1085,7 @@ async def _broadcast_tail(
             "conditions_count": len(_mapping_list(result.get("conditions"))),
             "gate": _gate_public(episode.gate or {}),
             "degraded": degraded,
+            "reminder_created": _reminder_created(episode.gate or {}),
         },
     )
 
@@ -1088,6 +1101,11 @@ def _citation_items(episode: Episode) -> list[dict[str, object]]:
                 if isinstance(entry, dict):
                     items.append(dict(entry))
     return items
+
+
+def _reminder_created(gate: dict[str, object]) -> bool:
+    """归档时是否建了提醒：存 gate 供流重放与详情共用，不进公开 gate 面。"""
+    return bool(gate.get("reminder_created", False))
 
 
 def _gate_public(gate: dict[str, object]) -> dict[str, object]:
@@ -1187,6 +1205,11 @@ async def episode_detail(session: AsyncSession, user_id: int, episode_id: int) -
         "clarify": clarify,
         "result": episode.result,
         "gate": _gate_public(episode.gate or {}),
+        # 删空通知文案随详情下发（N1b）：前端不再镜像 compose 的文案
+        "no_conclusion_notice": compose.NO_CONCLUSION_NOTICE
+        if bool((episode.gate or {}).get("no_conclusion"))
+        else None,
+        "reminder_created": _reminder_created(episode.gate or {}),
         "qa_turns": [],
         "profile_snapshot": episode.profile_snapshot or {},
         "vitals_snapshot": episode.vitals_snapshot or {},

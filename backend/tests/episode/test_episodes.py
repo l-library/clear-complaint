@@ -7,7 +7,7 @@
 import json
 import re
 from collections.abc import Awaitable, Callable
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import partial
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -392,6 +392,8 @@ def test_unverified_citation_deletes_conclusion(
     notices = [dict(event[1]) for event in events if event[0] == "notice"]
     assert notices[-1]["kind"] == "no_conclusion"
     assert notices[-1]["text"] == compose.NO_CONCLUSION_NOTICE
+    # no_conclusion 出口复用自我观察随访规则：done 与详情都说提醒已建
+    assert done["reminder_created"] is True
 
     detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
     assert detail["result"] is None
@@ -400,6 +402,8 @@ def test_unverified_citation_deletes_conclusion(
     assert detail["gate"]["citations_dropped"] == 2
     assert detail["gate"]["citations_verified"] == 0
     assert detail["gate"]["no_conclusion"] is True
+    assert detail["no_conclusion_notice"] == compose.NO_CONCLUSION_NOTICE
+    assert detail["reminder_created"] is True
 
 
 def test_unknown_condition_name_is_dropped(
@@ -481,11 +485,51 @@ def test_platform_emptied_candidates_publishes_no_conclusion(
     notices = [dict(event[1]) for event in events if event[0] == "notice"]
     assert notices[-1]["kind"] == "no_conclusion"
     assert notices[-1]["text"] == compose.NO_CONCLUSION_NOTICE
+    assert done["reminder_created"] is True
 
     detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
     assert detail["result"] is None
     assert detail["episode"]["status"] == "saved"
     assert detail["gate"]["no_conclusion"] is True
+    assert detail["no_conclusion_notice"] == compose.NO_CONCLUSION_NOTICE
+
+
+def test_no_conclusion_save_creates_followup_readable_from_endpoint(
+    db_client: TestClient,
+    user: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """审计问题 1 的随访不可达：删空出口建自我观察式随访提醒，不发任何档位。"""
+    condition = {
+        "name": "上呼吸道感染",
+        "evidence": [
+            {"evidence_idx": 0, "doc_title": "x", "section": "y", "quote": "池子里没有这句"}
+        ],
+    }
+    fake = Platform([_draft_ready(conditions=[condition])])
+    monkeypatch.setattr(platform, "call_triage", fake)
+
+    with db_client.stream(
+        "POST", "/api/episodes", json={"complaint": "流鼻涕三天了"}, headers=_sse_headers(user)
+    ) as stream:
+        body = stream.read().decode()
+    events = _parse_events(body)
+    done = dict(events[-1][1])
+
+    # 约束四完好：流里没有任何档位与科室
+    assert done["triage"] is None
+    assert "result_section" not in _names(events)
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    assert detail["result"] is None
+
+    # 提醒行落在 created_at + 48 小时，从提醒端点可读（api.md 10.1）
+    created = datetime.fromisoformat(detail["episode"]["created_at"])
+    due_day = (created + timedelta(hours=48)).strftime("%Y-%m-%d")
+    data = _body(db_client.get("/api/reminders", params={"date": due_day}, headers=_auth(user)))[
+        "data"
+    ]
+    assert len(data["groups"]["followup"]) == 1
+    assert data["groups"]["recheck"] == []
 
 
 def test_zero_candidate_draft_still_publishes_result(
@@ -929,6 +973,7 @@ def test_clinic_generation_auto_archives_and_creates_recheck(
     # 生成完成即归档，不依赖任何手动确认（issue #24）
     assert detail["episode"]["status"] == "saved"
     assert detail["episode"]["saved_at"]
+    assert detail["reminder_created"] is True
 
     reminders = run_db(partial(_episode_reminders, episode_id=1))
     assert len(reminders) == 1
@@ -975,7 +1020,39 @@ def test_emergency_generation_archives_without_reminder(
 
     # 急诊档照常归档，但不建提醒：去急诊不需要应用提醒
     assert detail["episode"]["status"] == "saved"
+    assert detail["reminder_created"] is False
     assert run_db(partial(_episode_reminders, episode_id=1)) == []
+
+
+def test_doc_title_filename_maps_to_human_title(
+    db_client: TestClient, user: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """审计问题 3：文件名式 doc_title 折成人文标题，未知值原样透传。"""
+    condition = {
+        "name": "上呼吸道感染",
+        "evidence": [
+            {
+                "evidence_idx": 0,
+                "doc_title": "1645425822651_51288.pdf",
+                "section": "临床表现",
+                "quote": "以鼻塞、流涕、喷嚏、咽痛为主要表现",
+            }
+        ],
+    }
+    fake = Platform([_draft_ready(conditions=[condition])])
+    monkeypatch.setattr(platform, "call_triage", fake)
+
+    with db_client.stream(
+        "POST", "/api/episodes", json={"complaint": "流鼻涕三天了"}, headers=_sse_headers(user)
+    ) as stream:
+        body = stream.read().decode()
+    events = _parse_events(body)
+    citations = [dict(event[1]) for event in events if event[0] == "citation"]
+    assert citations[0]["items"][0]["doc_title"] == "常见动物致伤诊疗规范"
+
+    detail = _body(db_client.get("/api/episodes/1", headers=_auth(user)))["data"]
+    evidence = detail["result"]["conditions"][0]["evidence"][0]
+    assert evidence["doc_title"] == "常见动物致伤诊疗规范"
 
 
 def test_delete_removes_episode(
